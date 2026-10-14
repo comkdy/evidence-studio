@@ -1,6 +1,6 @@
 # Evidence Studio 사내 이관 안내
 
-기준: 2026-10-14. 현재 실행 코드 기준이며 이전 목업·시범 운영 문서보다 우선합니다.
+기준: 2026-10-14. 현재 실행 코드와 저장 구조를 기준으로 설명합니다.
 
 ## 1. 전달 구성과 초기 상태
 
@@ -14,7 +14,7 @@
 | `docs/evidence-studio-introduction.html` | 단일 파일 팀 소개 자료; 외부 리소스 없음 |
 | `PACKAGE_MANIFEST.json` | 전달 파일 목록·SHA-256 및 제외 항목 기록 |
 
-실제 `.env`, `.git`, `.venv`, `node_modules`, 기존 분석 JSON·DB/Wiki 백업, 테스트용 DB 복사본, 캐시·로그·스크린샷은 포함하지 않습니다. `shared`와 테스트의 목업 fixture는 소스의 일부이며 실제 DB로 적재되지 않습니다.
+실제 `.env`, `.git`, `.venv`, `node_modules`, 기존 분석 JSON·DB/Wiki 백업, 테스트용 DB 복사본, 캐시·로그·스크린샷은 포함하지 않습니다. `shared`에는 실제 앱의 분류·용어 초기값과 검색 평가 입력 형식만 둡니다. 회귀 테스트는 임시 PDF·DB로 실행하며 실제 라이브러리에 예제 논문을 적재하지 않습니다.
 
 빈 DB 파일을 미리 배포하지 않습니다. 첫 시작 시 `backend/pilot_schema.sql`로 새 DB를 만들고 기본 전문가 9개·기본 용어 사전·`.env`의 `BOOTSTRAP_ADMIN_EMPLOYEE_ID`로 지정한 관리자 계정을 초기화합니다. 이전 전문가 편집·유저 목록·사전 편집·연구 결과는 유지하지 않습니다. Wiki 본문과 목차/이력은 이후 새 작업으로 생성됩니다.
 
@@ -116,4 +116,4 @@ node --test tests/*.test.mjs
 
 실제 연결 후에는 PDF 1편 → 자료 현황 → 논문/근거 → 공통/전문가 Wiki → 질문/원문 인용 순으로 먼저 확인하세요. 읽기 실패 PDF, 근거가 부족한 질문, 조건이 다른 수치 비교도 점검 대상입니다. 검색 평가 도구는 [RESEARCH_EVALUATION.md](RESEARCH_EVALUATION.md)에 있습니다.
 
-구조는 [DATABASE_PLAN.md](DATABASE_PLAN.md), [MARKDOWN_WIKI.md](MARKDOWN_WIKI.md), [RESEARCH_QA.md](RESEARCH_QA.md), [TERMINOLOGY.md](TERMINOLOGY.md)를 참고합니다. 설계 문서의 미래 계획을 구현 완료로 해석하지 않습니다. 이전 시범의 건수·수동 분석 결과는 새 DB에 포함되지 않습니다.
+구조는 [DATABASE_PLAN.md](DATABASE_PLAN.md), [MARKDOWN_WIKI.md](MARKDOWN_WIKI.md), [RESEARCH_QA.md](RESEARCH_QA.md), [TERMINOLOGY.md](TERMINOLOGY.md)를 참고합니다. 설계 문서의 미래 계획을 구현 완료로 해석하지 않습니다. 공개본의 DB·Wiki·raw는 비어 있으며, 사내에서 넣은 논문으로 데이터를 구성합니다.

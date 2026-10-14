@@ -30,11 +30,12 @@ Copy-Item .env.example .env
 
 `BOOTSTRAP_ADMIN_EMPLOYEE_ID`가 비어 있으면 로컬 확인용 데모 ID `0000000`을 사용합니다. 사내에서는 실제 초기 관리자 사번을 `.env`에 지정한 뒤 첫 실행하세요. SSO 모드는 실제 사번을 설정해야 시작됩니다.
 
-첫 실행 시 빈 DB의 schema, 기본 전문가 9개, 용어 사전 기본값, `.env`의 `BOOTSTRAP_ADMIN_EMPLOYEE_ID`에 지정한 초기 관리자을 생성합니다. 기존 연구 데이터는 복원하지 않습니다. `raw/` 감시는 첫 실행부터 시작하고 이후 60초마다 PDF를 확인합니다. 원본 PDF는 포함하지 않습니다. 모델 설정 후 `raw/`에 PDF를 넣으면 수집과 Wiki 작성이 시작됩니다. 새 PDF와 생성된 DB·Wiki·실제 `.env`는 Git에서 제외됩니다.
+첫 실행 시 빈 DB의 schema, 기본 전문가 9개, 용어 사전 기본값, `.env`의 `BOOTSTRAP_ADMIN_EMPLOYEE_ID`에 지정한 초기 관리자를 생성합니다. 기존 연구 데이터는 복원하지 않습니다. `raw/` 감시는 첫 실행부터 시작하고 이후 60초마다 PDF를 확인합니다. 원본 PDF는 포함하지 않습니다. 모델 설정 후 `raw/`에 PDF를 넣으면 수집과 Wiki 작성이 시작됩니다. 새 PDF와 생성된 DB·Wiki·실제 `.env`는 Git에서 제외됩니다.
 
 ## 연결 후 동작하는 범위
 
 - PDF text 추출 → 문맥 chunking → keyword/vector 검색·reranking → 근거 기반 심층 답변.
+- 앞선 대화를 참고하는 후속 질문, 실제 처리 단계 표시, 답변 중지와 대화 다시 열기.
 - 공통·전문가별 Markdown Wiki 작성, 관련 변경 반영, 이력·목차·lint.
 - 전문가 생성·수정·삭제, 논문 분류 필터, 자료 검토·수정 제안, 용어 사전, 사용자 권한.
 
@@ -52,4 +53,10 @@ pnpm build
 node --test tests/*.test.mjs
 ```
 
-과거 시범 운영 문서는 당시 데이터와 목업을 설명할 수 있습니다. 현재 실행·이관 기준은 이 README와 `docs/HANDOFF.md`입니다. `src/App.tsx`, `shared/papers.json`, `shared/evidence.json`, `/api/papers`는 이전 목업의 예시이며 실제 라이브러리는 `src/PilotApp.tsx`와 `/api/pilot/*`를 사용합니다. 예시 자료를 DB에 자동 적재하지 않습니다.
+## 코드와 데이터 구성
+
+앱 진입점은 `src/main.tsx` → `src/PilotApp.tsx`이며 실제 DB API `/api/pilot/*`를 사용합니다. `Pilot`이라는 파일명·API 경로는 기존 연결 호환성을 위해 유지하며 별도 실행 버전이 아닙니다.
+
+`shared/expert_facets.json`과 `shared/terminology.json`은 실제 앱의 분류 정의와 용어 사전 초기값입니다. `shared/research_eval.example.json`은 검색 평가 도구의 입력 형식 예시입니다. 테스트에서 생성하는 합성 PDF·DB는 임시 폴더에서만 사용되며 실제 라이브러리에 자동 적재되지 않습니다.
+
+실행·이관 기준은 이 README와 [HANDOFF.md](docs/HANDOFF.md)입니다. 현재 저장 구조는 [DB 설계](docs/DATABASE_PLAN.md), 전문가별 범위와 갱신은 [전문가 지식 설계](docs/EXPERT_KNOWLEDGE_PLAN.md)를 참고하세요.

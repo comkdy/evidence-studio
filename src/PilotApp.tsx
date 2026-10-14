@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUpRight, BookOpen, Bookmark, ChevronRight, CircleHelp, Clock3, Copy, FileText, Layers3, Lock, Menu, MessageSquare, Plus, Search, Settings2, Share2, Trash2, Undo2, Upload, Users, X } from 'lucide-react';
+import { ArrowUpRight, BookOpen, Bookmark, ChevronRight, CircleHelp, Clock3, FileText, Layers3, Lock, Menu, MessageSquare, Plus, Search, Settings2, Share2, Trash2, Undo2, Upload, Users, X } from 'lucide-react';
 import { roleLabels } from './access';
 import { CommonWikiRefresh, WikiRefresh } from './WikiRefresh';
 import { ProcessingBadge, ProcessingView, useProcessing } from './ProcessingActivity';
@@ -8,13 +8,14 @@ import { BookA } from 'lucide-react';
 import { api, displayName } from './identity';
 import type { Session } from './identity';
 import { AccessDenied, LoginGate, ProfileCard, UserManagement } from './AccountViews';
-import { get, kinds, personalKey, readHistory, readBookmarks, readView, time, viewHash, viewNames } from './pilotData';
-import { scientificNotation as numberText } from './scientificNotation';
-import type { CorpusStatus, Detail, Expert, Paper, PilotView, Recommendation, SavedSearch, SearchResult, Summary, Wiki } from './pilotData';
+import { get, personalKey, readHistory, readBookmarks, readView, time, viewHash, viewNames } from './pilotData';
+import type { CorpusStatus, Detail, Expert, Paper, PilotView, ConversationTurn, SavedSearch, Summary, Wiki } from './pilotData';
 import { AbstractOverview, ClaimCard, GuideView, Pager, StatusView, WikiCard } from './PilotViews';
 import { ExpertCreate } from './ExpertCreate';
-import { ResearchAnswerView } from './ResearchAnswerView';
-import { answerCopyText, researchModeLabels, savedResearchMode } from './researchAnswer';
+import { ResearchDialogue } from './ResearchDialogue';
+import { contextRunIds, conversationTurns, readResearchStream, saveConversation } from './researchConversation';
+import type { ProgressEvent } from './researchConversation';
+import { researchModeLabels, savedResearchMode } from './researchAnswer';
 import { boundedPage, reconcileExpertScope } from './workspaceState';
 import { ExpertDelete } from './ExpertDelete';
 import type { DeletedExpert } from './ExpertDelete';
@@ -53,19 +54,33 @@ function ResearchWorkspace({session}:{session:Session}){
  const [busy,setBusy]=useState(false),[detail,setDetail]=useState<Detail|null>(null);
  const [dataRevision,setDataRevision]=useState(0);
  const [selectedExperts,setSelectedExperts]=useState<string[]>([]),[selectionMode,setSelectionMode]=useState<'auto'|'manual'>('auto');
- const [search,setSearch]=useState<SearchResult|null>(null),[searchTitle,setSearchTitle]=useState(''),[searchExpertNames,setSearchExpertNames]=useState<string[]>([]);
- const [searchTask,setSearchTask]=useState<'recommend'|'answer'|null>(null);
+ const [turns,setTurns]=useState<ConversationTurn[]>([]),[progress,setProgress]=useState<ProgressEvent[]>([]);
+ const [questionBusy,setQuestionBusy]=useState(false);
+ const turnsRef=useRef<ConversationTurn[]>([]),conversationId=useRef<string|null>(null);
  const [visibility,setVisibility]=useState<'team'|'private'>('team'),[history,setHistory]=useState<SavedSearch[]>(()=>readHistory(session.user.employee_id)),[savedId,setSavedId]=useState<string|null>(null);
  const [personalFilter,setPersonalFilter]=useState<'all'|'private'|'trash'|'bookmarks'>('all'),[bookmarks,setBookmarks]=useState(()=>readBookmarks(session.user.employee_id));
  const dialog=useRef<HTMLDialogElement>(null),selection=useRef(0),searchEpoch=useRef(0);
  const searchController=useRef<AbortController|null>(null),viewRef=useRef(view);
- const questionBusy=searchTask!==null;
+ const visibilityRef=useRef(visibility);visibilityRef.current=visibility;
+ function updateTurns(next:ConversationTurn[]){turnsRef.current=next;setTurns(next);}
+ function persistConversation(next:ConversationTurn[]){
+  if(!next.length)return;
+  const id=conversationId.current??crypto.randomUUID();conversationId.current=id;setSavedId(id);
+  const record=saveConversation(id,next,visibilityRef.current);
+  setHistory(old=>[record,...old.filter(r=>r.id!==id)].slice(0,100));
+ }
  const activeExperts=summary?.experts.filter(e=>selectedExperts.includes(e.id)&&e.enabled!==0)||[];
  const browsingExpert=summary?.experts.find(e=>e.id===expert);
  const needsReview=summary?.page_states.filter(s=>s.status!=='ready'&&s.status!=='excluded').reduce((n,s)=>n+s.count,0)||0;
- function cancelSearch(){searchEpoch.current++;searchController.current?.abort();searchController.current=null;setSearchTask(null);}
+ function cancelSearch(){
+  searchEpoch.current++;searchController.current?.abort();searchController.current=null;setQuestionBusy(false);
+  if(turnsRef.current.some(t=>t.status==='pending')){
+   const next=turnsRef.current.map(t=>t.status==='pending'?{...t,status:'stopped' as const,message:'답변을 중지했습니다. 이어서 질문하거나 다시 시도할 수 있습니다.'}:t);
+   updateTurns(next);persistConversation(next);
+  }
+ }
  function navigate(next:PilotView){cancelSearch();close();viewRef.current=next;setView(next);location.hash=viewHash(next);setMobile(false);setQuery('');setSubmitted('');setPage(0);setError('');setBusy(false);}
- function newQuestion(){setSearch(null);setSearchTitle('');setSavedId(null);setSelectedExperts([]);setExpert('');setSelectionMode('auto');navigate('search');}
+ function newQuestion(){navigate('search');conversationId.current=null;updateTurns([]);setProgress([]);setSavedId(null);setSelectedExperts([]);setExpert('');setSelectionMode('auto');}
  useEffect(()=>{const change=()=>{if(location.hash==='#main')return;const next=readView();if(next!==viewRef.current){cancelSearch();close();viewRef.current=next;setPage(0);setQuery('');setSubmitted('');}setView(next);setMobile(false);if(location.hash!==viewHash(next))window.history.replaceState(null,'',viewHash(next));};change();window.addEventListener('hashchange',change);return()=>{window.removeEventListener('hashchange',change);searchEpoch.current++;searchController.current?.abort();};},[]);
  function refreshData(){setDataRevision(value=>value+1);}
  const processing=useProcessing(refreshData);
@@ -95,29 +110,32 @@ function ResearchWorkspace({session}:{session:Session}){
   const question=text.trim();
   if(!question||!summary||questionBusy||searchController.current)return;
   if(selectionMode==='manual'&&!activeExperts.length){setError('질문할 수 있는 전문가를 선택해 주세요.');return;}
-  const request=++searchEpoch.current,controller=new AbortController();searchController.current=controller;setSearchTask(selectionMode==='auto'?'recommend':'answer');setError('');setSearchTitle(question);setSearch(null);setSavedId(null);
-  const requestedVisibility=visibility;
+  const previous=turnsRef.current,request=++searchEpoch.current,controller=new AbortController();
+  const turn:ConversationTurn={id:crypto.randomUUID(),question,expertIds:selectionMode==='manual'?activeExperts.map(e=>e.id):[],expertNames:selectionMode==='manual'?activeExperts.map(e=>e.name):[],createdAt:new Date().toISOString(),status:'pending'};
+  searchController.current=controller;setQuestionBusy(true);setError('');setProgress([]);setQuery('');
+  updateTurns([...previous,turn]);persistConversation(turnsRef.current);
+  function patchTurn(change:Partial<ConversationTurn>){updateTurns(turnsRef.current.map(t=>t.id===turn.id?{...t,...change}:t));}
   try{
-   let contributors=activeExperts.map(e=>({id:e.id,name:e.name}));
-   if(selectionMode==='auto'){
-    const recommendation=await get<Recommendation>('/recommend?q='+encodeURIComponent(question),controller.signal);
+   const response=await fetch('/api/pilot/ask-stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question,expert_ids:turn.expertIds,selection:selectionMode,history_run_ids:contextRunIds(previous)}),signal:controller.signal});
+   const result=await readResearchStream(response,controller.signal,event=>{
     if(request!==searchEpoch.current||controller.signal.aborted)return;
-    const available=new Set(summary.experts.filter(e=>e.enabled!==0).map(e=>e.id));
-    contributors=recommendation.experts.filter((e,i,all)=>available.has(e.id)&&all.findIndex(item=>item.id===e.id)===i).slice(0,2).map(e=>({id:e.id,name:e.name}));
-    setSelectedExperts(contributors.map(e=>e.id));
-    if(!contributors.length){setSelectionMode('manual');setError('질문에 맞는 전문가를 자동으로 찾지 못했습니다. 아래에서 전문가를 직접 선택해 주세요.');return;}
+    if(event.type==='progress')setProgress(old=>old.at(-1)?.message===event.message?old:[...old,event].slice(-10));
+    else{patchTurn({expertIds:event.ids,expertNames:event.names});setSelectedExperts(event.ids);}
+   });
+   if(request!==searchEpoch.current||controller.signal.aborted)return;
+   patchTurn({status:'completed',result});persistConversation(turnsRef.current);
+  }catch(e){
+   if(request===searchEpoch.current&&!controller.signal.aborted){
+    patchTurn({status:'error',message:e instanceof Error?e.message:'답변을 준비하지 못했습니다.'});persistConversation(turnsRef.current);
    }
-   const ids=contributors.map(e=>e.id),names=contributors.map(e=>e.name);
-   setSearchTask('answer');
-   const response=await fetch('/api/pilot/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question,expert_ids:ids}),signal:controller.signal});if(!response.ok){const e=await response.json();throw new Error(typeof e.detail==='string'?e.detail:'답변을 준비하지 못했습니다.');}const data:SearchResult=await response.json();if(request!==searchEpoch.current||controller.signal.aborted)return;
-   setSearch(data);setSearchExpertNames(names);
-   const record:SavedSearch={id:crypto.randomUUID(),question,expertIds:ids,expertNames:names,createdAt:new Date().toISOString(),visibility:requestedVisibility,mode:data.research?.mode??'deep',deleted:false,result:structuredClone(data)};
-   setHistory(old=>[record,...old].slice(0,100));setSavedId(record.id);
-  }catch(e){if(request===searchEpoch.current&&!controller.signal.aborted)setError(String(e));}finally{if(request===searchEpoch.current){setSearchTask(null);searchController.current=null;}}
+  }finally{if(request===searchEpoch.current){setQuestionBusy(false);searchController.current=null;}}
  }
- function openHistory(r:SavedSearch){setSearch(structuredClone(r.result));setSearchTitle(r.question);setSearchExpertNames(r.expertNames);setSelectedExperts(summary?reconcileExpertScope(summary.experts,r.expertIds,'').selectedIds:[]);setSavedId(r.id);navigate('search');}
+ function openHistory(r:SavedSearch){
+  navigate('search');conversationId.current=r.id;updateTurns(conversationTurns(r));setProgress([]);setSavedId(r.id);setVisibility(r.visibility);
+  setSelectedExperts(summary?reconcileExpertScope(summary.experts,r.expertIds,'').selectedIds:[]);
+ }
  function changeRecord(id:string,change:Partial<SavedSearch>){setHistory(old=>old.map(r=>r.id===id?{...r,...change}:r));}
- async function copyResult(){if(!search)return;const evidence=['논문에서 찾은 근거',...search.claims.flatMap(c=>[numberText(c.summary),numberText(c.scope),...c.measurements.flatMap(m=>[m.label+': '+numberText(m.raw_value)+' ('+kinds[m.kind]+')',...m.conditions.map(v=>v.name+': '+numberText(v.raw_value??'미기재'))]),...c.sources.map(s=>'p. '+s.page_number+' '+s.quote)]),...search.hits.flatMap(h=>[h.title+' · p. '+h.page_number,h.text])];const text=answerCopyText(searchTitle,searchExpertNames,search,evidence);try{await navigator.clipboard.writeText(text);setNotice('답변·한계·원문 근거를 복사했습니다.');}catch{setNotice('브라우저에서 복사할 수 없습니다. 원문을 선택해서 복사해 주세요.');}}
+ function changeVisibility(next:'team'|'private'){visibilityRef.current=next;setVisibility(next);if(savedId)changeRecord(savedId,{visibility:next});}
  function showExpert(e:Expert){setExpert(e.id);navigate('wiki');}
  function showExpertPapers(e:Expert){setExpert(e.id);setCategories({});navigate('library');}
  function askExpert(e:Expert){if(e.enabled===0)return;newQuestion();setSelectedExperts([e.id]);setSelectionMode('manual');setQuery(e.name+' 분야의 주요 결과와 적용 한계를 비교해 줘');}
@@ -154,19 +172,16 @@ function ResearchWorkspace({session}:{session:Session}){
    {(view==='library'||view==='status')&&<div className="pilot-compact-stats"><span><strong>{summary?.curated_papers??'—'}</strong>편 구조화</span><span><strong>{summary?.counts.claims??'—'}</strong>개 주장</span><span><strong>{summary?.counts.measurements??'—'}</strong>개 수치</span><span><strong>{summary?.counts.condition_values??'—'}</strong>개 조건 항목</span></div>}
 
    {view==='search'&&<>
-    <form className="pilot-search" onSubmit={e=>{e.preventDefault();askQuestion();}}><Search size={19}/><input aria-label="연구 질문" disabled={questionBusy} value={query} onChange={e=>setQuery(e.target.value)} placeholder="예: FeFET endurance · OCTRAM retention"/><button className="primary" type="submit" disabled={!summary||questionBusy||!query.trim()||(selectionMode==='manual'&&!activeExperts.length)}>{questionBusy?'답변 준비 중…':'질문하기'}</button></form>
-    <div className="pilot-question-options"><div className="pilot-segments" aria-label="전문가 선택 방식"><button disabled={questionBusy} aria-pressed={selectionMode==='auto'} onClick={()=>setSelectionMode('auto')}>전문가 자동 선택</button><button disabled={questionBusy} aria-pressed={selectionMode==='manual'} onClick={()=>setSelectionMode('manual')}>직접 선택</button></div><div className="pilot-segments" aria-label="질문 공개 범위"><button disabled={questionBusy} aria-pressed={visibility==='team'} onClick={()=>setVisibility('team')}><Users size={13}/>팀에 공유</button><button disabled={questionBusy} aria-pressed={visibility==='private'} onClick={()=>setVisibility('private')}><Lock size={13}/>나만 보기</button></div></div>
-    <p className="pilot-muted">전문가의 Wiki와 담당 논문에서 질문에 맞는 근거를 찾습니다. 대화 목록은 이 브라우저에, 답변 당시의 근거 기록은 본인만 조회할 수 있도록 서버에 보관됩니다.</p>
+    {record&&<div className="pilot-result-actions"><span>대화 {turns.length}회 · {visibility==='team'?'팀 공유':'나만 보기'}</span><button disabled={questionBusy} onClick={()=>{changeRecord(record.id,{deleted:true});conversationId.current=null;updateTurns([]);setSavedId(null);navigate('personal');setPersonalFilter('trash');}}><Trash2 size={13}/>대화 삭제</button></div>}
+    <ResearchDialogue turns={turns} progress={progress} busy={questionBusy} onStop={cancelSearch} onPaper={openPaper} onRetry={text=>{setQuery(text);document.getElementById('research-question')?.focus();}} onNotice={setNotice}/>
+    <div className={turns.length?'research-composer':''}>
+    <form className="pilot-search" onSubmit={e=>{e.preventDefault();askQuestion();}}><Search size={19}/><input id="research-question" aria-label="연구 질문" maxLength={1000} value={query} onChange={e=>setQuery(e.target.value)} placeholder={turns.length?'이 답변에 대해 더 궁금한 점을 물어보세요.':'예: FeFET endurance · OCTRAM retention'}/><button className="primary" type="submit" disabled={!summary||questionBusy||!query.trim()||(selectionMode==='manual'&&!activeExperts.length)}>{questionBusy?'답변 준비 중…':turns.length?'이어서 질문':'질문하기'}</button></form>
+    <div className="pilot-question-options"><div className="pilot-segments" aria-label="전문가 선택 방식"><button disabled={questionBusy} aria-pressed={selectionMode==='auto'} onClick={()=>setSelectionMode('auto')}>전문가 자동 선택</button><button disabled={questionBusy} aria-pressed={selectionMode==='manual'} onClick={()=>setSelectionMode('manual')}>직접 선택</button></div><div className="pilot-segments" aria-label="질문 공개 범위"><button disabled={questionBusy} aria-pressed={visibility==='team'} onClick={()=>changeVisibility('team')}><Users size={13}/>팀에 공유</button><button disabled={questionBusy} aria-pressed={visibility==='private'} onClick={()=>changeVisibility('private')}><Lock size={13}/>나만 보기</button></div></div>
+    <p className="research-context-note">{turns.length?'앞선 대화를 참고하되, 각 답변의 근거는 전문가의 Wiki와 논문에서 다시 확인합니다.':'전문가의 Wiki와 담당 논문에서 질문에 맞는 근거를 찾고 대화를 이어갑니다.'}</p>
     {selectionMode==='manual'&&<div className="pilot-expert-choices">{summary?.experts.filter(e=>e.enabled!==0).map(e=><label key={e.id}><input type="checkbox" disabled={questionBusy} checked={selectedExperts.includes(e.id)} onChange={()=>setSelectedExperts(old=>old.includes(e.id)?old.filter(x=>x!==e.id):[...old,e.id])}/><span>{e.name}<small>논문 {e.paper_count}편</small></span></label>)}</div>}
-    {!search&&!questionBusy&&<div className="pilot-prompts">{['OCTRAM retention','FeFET endurance','CFET SRAM','NAND erase'].map(q=><button key={q} disabled={!summary} onClick={()=>{setQuery(q);askQuestion(q);}}>{q}<ArrowUpRight size={14}/></button>)}</div>}
-    {questionBusy&&<p className="pilot-muted" role="status">{searchTask==='recommend'?'질문에 맞는 전문가를 찾고 있습니다…':'여러 논문의 관련 근거와 한계를 검토하고 있습니다…'}</p>}
-    {search&&!questionBusy&&<section className="pilot-results"><div className="pilot-section-title"><h2>{searchTitle}</h2><button className="secondary" onClick={copyResult}><Copy size={14}/>답변과 근거 복사</button></div><div className="pilot-contributors"><BookOpen size={17}/><span>참여 전문가<strong>{searchExpertNames.join(' · ')}</strong></span></div><p className="pilot-muted">근거의 검토 상태와 적용 조건을 함께 확인하세요.</p>
-     {record&&<div className="pilot-result-actions"><button onClick={()=>changeRecord(record.id,{visibility:record.visibility==='team'?'private':'team'})}>{record.visibility==='team'?<Users size={13}/>:<Lock size={13}/>} {record.visibility==='team'?'팀 공유':'나만 보기'} · 변경</button><button onClick={()=>{changeRecord(record.id,{deleted:true});setSearch(null);navigate('personal');setPersonalFilter('trash');}}><Trash2 size={13}/>휴지통</button></div>}
-     <ResearchAnswerView key={search.run_id??savedId??searchTitle} result={search}/>
-     <div className="pilot-section-title"><h2>질문과 연결된 주장 {search.total_claims}개</h2><span>{search.claims.length}개 표시 · 연결 수치와 조건</span></div>
-     {search.claims.length?search.claims.map(c=><ClaimCard key={c.id} claim={c} onPaper={openPaper}/>):<p className="pilot-empty">선택한 전문가 범위에서 일치하는 주장을 찾지 못했습니다. 질문을 좁히거나 원문을 확인해 주세요.</p>}
-     <details className="pilot-raw-results"><summary>원문 검색 결과 {search.hits.length}개 보기</summary>{search.hits.map(h=><article className="pilot-hit" key={h.id}><button onClick={()=>openPaper(h.paper_id)}>{h.title}<ArrowUpRight size={14}/></button><p>{h.text}</p><a href={'/api/pilot/documents/'+h.document_id+'/pdf#page='+h.page_number} target="_blank" rel="noreferrer">p. {h.page_number}{h.page_end&&h.page_end!==h.page_number?'–'+h.page_end:''} · 원문 PDF</a>{h.parent_context&&h.parent_context.text!==h.text&&<details className="pilot-hit-context"><summary>앞뒤 문맥 함께 보기{h.parent_context.section?' · '+h.parent_context.section:''}</summary><p>{h.parent_context.text}</p></details>}</article>)}</details>
-    </section>}
+    {!turns.length&&!questionBusy&&<div className="pilot-prompts">{['OCTRAM retention','FeFET endurance','CFET SRAM','NAND erase'].map(q=><button key={q} disabled={!summary} onClick={()=>askQuestion(q)}>{q}<ArrowUpRight size={14}/></button>)}</div>}
+    <p className="pilot-muted">대화 목록은 이 브라우저에, 답변 당시의 근거 기록은 본인만 조회할 수 있도록 서버에 보관됩니다.</p>
+    </div>
    </>}
 
    {view==='library'&&<div className="pilot-library-layout">
@@ -187,9 +202,9 @@ function ResearchWorkspace({session}:{session:Session}){
 
    {(view==='team'||view==='personal')&&<>
     {view==='personal'&&<ProfileCard session={session} questions={history.filter(r=>!r.deleted).length} bookmarks={bookmarks.length}/>}
-    <p className="pilot-local-note">최근 질문 100개와 북마크는 이 브라우저에 사번별로 저장됩니다. 현재 팀 공유 기록은 다른 사용자에게 전달되지 않습니다.</p>
+    <p className="pilot-local-note">최근 대화 100개와 북마크는 이 브라우저에 사번별로 저장됩니다. 현재 팀 공유 기록은 다른 사용자에게 전달되지 않습니다.</p>
     {view==='personal'&&<div className="pilot-segments">{([['all','내 대화'],['private','비공개'],['trash','휴지통'],['bookmarks','북마크 '+bookmarks.length]] as const).map(([id,label])=><button key={id} aria-pressed={personalFilter===id} onClick={()=>setPersonalFilter(id)}>{label}</button>)}</div>}
-    {view==='personal'&&personalFilter==='bookmarks'?<div className="pilot-bookmarks">{bookmarks.map(id=><BookmarkRow key={id} id={id} onOpen={openPaper} onRemove={toggleBookmark}/>)}{!bookmarks.length&&<p className="pilot-empty">저장한 논문이 없습니다. 라이브러리에서 북마크를 눌러보세요.</p>}</div>:<>{visibleHistory.map(r=><article className="pilot-history" key={r.id}><button className="pilot-history-title" onClick={()=>openHistory(r)} disabled={r.deleted}>{r.question}<ArrowUpRight size={15}/></button><p>{r.expertNames.join(' · ')}</p><small>{time(r.createdAt)} · {researchModeLabels[savedResearchMode(r)]} 질의 · 주장 {r.result.claims.length}개 · {r.visibility==='team'?'팀 공유':'비공개'}</small><div>{!r.deleted&&<button onClick={()=>changeRecord(r.id,{visibility:r.visibility==='team'?'private':'team'})}>{r.visibility==='team'?<Lock size={13}/>:<Share2 size={13}/>} {r.visibility==='team'?'비공개로 변경':'팀에 공유'}</button>}<button onClick={()=>changeRecord(r.id,{deleted:!r.deleted})}>{r.deleted?<Undo2 size={13}/>:<Trash2 size={13}/>} {r.deleted?'복구':'삭제'}</button></div></article>)}{!visibleHistory.length&&<p className="pilot-empty">표시할 질문이 없습니다.</p>}</>}
+    {view==='personal'&&personalFilter==='bookmarks'?<div className="pilot-bookmarks">{bookmarks.map(id=><BookmarkRow key={id} id={id} onOpen={openPaper} onRemove={toggleBookmark}/>)}{!bookmarks.length&&<p className="pilot-empty">저장한 논문이 없습니다. 라이브러리에서 북마크를 눌러보세요.</p>}</div>:<>{visibleHistory.map(r=><article className="pilot-history" key={r.id}><button className="pilot-history-title" onClick={()=>openHistory(r)} disabled={r.deleted}>{r.question}<ArrowUpRight size={15}/></button><p>{r.expertNames.join(' · ')}</p><small>{time(r.createdAt)} · 대화 {r.turns?.length||1}회 · {researchModeLabels[savedResearchMode(r)]} 질의 · 주장 {r.result.claims.length}개 · {r.visibility==='team'?'팀 공유':'비공개'}</small><div>{!r.deleted&&<button onClick={()=>changeRecord(r.id,{visibility:r.visibility==='team'?'private':'team'})}>{r.visibility==='team'?<Lock size={13}/>:<Share2 size={13}/>} {r.visibility==='team'?'비공개로 변경':'팀에 공유'}</button>}<button onClick={()=>changeRecord(r.id,{deleted:!r.deleted})}>{r.deleted?<Undo2 size={13}/>:<Trash2 size={13}/>} {r.deleted?'복구':'삭제'}</button></div></article>)}{!visibleHistory.length&&<p className="pilot-empty">표시할 질문이 없습니다.</p>}</>}
    </>}
    {view==='status'&&<><ProcessingView data={processing.data} error={processing.error} onPaper={openPaper}/><StatusView status={status} onPaper={openPaper} onChanged={refreshData}/></>}
    {view==='settings'&&(isExpertManager?<>{session.user.permissions.refresh_wiki&&<CommonWikiRefresh onCompleted={refreshData}/>}<div className="expert-settings-heading"><p>전문가의 설정을 확인·수정하거나 새로운 전문가를 추가하세요.</p><button className="primary" onClick={()=>setExpertEditor({})}><Plus size={16}/>전문가 추가</button></div><div className="pilot-settings-grid">{summary?.experts.map(e=><article key={e.id}><header><BookOpen size={17}/><h2>{e.name}</h2>{e.enabled===0&&<span className="expert-inactive">사용 안 함</span>}<button className="expert-card-delete" aria-label={e.name+' 삭제'} title="전문가 삭제" onClick={()=>setDeleteTarget(e)}><Trash2 size={13}/><span>삭제</span></button>{session.user.permissions.refresh_wiki&&<WikiRefresh expertId={e.id} expertName={e.name} disabled={e.enabled===0} onCompleted={refreshData}/>}</header><p title={e.overview}>{e.overview}</p><div className="expert-card-counts"><span>논문 <strong>{e.paper_count}</strong></span><span>주장 <strong>{e.claim_count}</strong></span><span>Wiki <strong>{e.wiki_count}</strong></span></div><footer><button className="secondary" aria-label={e.name+' 설정 확인·수정'} onClick={()=>setExpertEditor({id:e.id})}><Settings2 size={14}/>설정 확인·수정</button><button className="expert-knowledge-link" onClick={()=>showExpert(e)}>전문가 지식<ArrowUpRight size={14}/></button></footer></article>)}</div></>:<div className="pilot-empty"><Lock size={23}/><h2>관리자와 슈퍼 유저가 접근할 수 있습니다.</h2><button onClick={()=>navigate('wiki')}>전문가 지식으로 돌아가기</button></div>)}

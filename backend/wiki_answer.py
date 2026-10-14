@@ -10,6 +10,8 @@ from .wiki_policy import load_prompt
 from .answer_evidence import build_evidence
 from .answer_validation import grounded_sections, render_answer, review_items, apply_review
 from .answer_trace import save_run
+from .conversation_context import conversation_context, contextual_query
+from .research_progress import checkpoint, stage
 
 VERSION = 'research-answer-v1'
 MAX_SECONDS = 240
@@ -79,6 +81,9 @@ def _limitations(evidence, state):
 def answer(request, llm=None):
     from .wiki_api import load_catalogue, read_page
     from .terminology import snapshot as term_snapshot, prompt_rules, prompt_text, query_rules
+    checkpoint()
+    conversation = conversation_context(getattr(request, 'history_run_ids', []))
+    stage('context', '앞선 대화의 주제와 질문 범위를 확인했습니다.')
     start = time.monotonic()
     deadline = start + MAX_SECONDS
     store, state, catalogue = load_catalogue()
@@ -108,6 +113,13 @@ def answer(request, llm=None):
         prompts = {}
 
     def call(operation, payload):
+        checkpoint()
+        labels = {'plan':'추가로 확인할 논문과 검색 방향을 정리하고 있습니다.',
+                  'refine':'찾은 근거와 빠진 조건을 검토하고 있습니다.',
+                  'answer':'논문 근거를 바탕으로 답변을 작성하고 있습니다.',
+                  'review':'답변의 주장·수치·인용을 다시 확인하고 있습니다.'}
+        stage(operation, labels[operation])
+        payload = dict(payload, conversation_context=conversation)
         remaining = deadline - time.monotonic()
         if remaining <= 0 or len(trace['model_calls']) >= MAX_MODEL_CALLS:
             raise WikiError('심층 분석 시간 또는 모델 호출 한도에 도달했습니다.')
@@ -122,6 +134,7 @@ def answer(request, llm=None):
             llm.timeout_seconds = min(90, max(1, remaining))
         try:
             result = llm.complete_json(system, payload)
+            checkpoint()
             if not isinstance(result, dict):
                 raise WikiError('모델 응답 형식을 확인해야 합니다.')
             entry['status'] = 'completed'
@@ -131,13 +144,16 @@ def answer(request, llm=None):
             raise
 
     def search(query):
+        checkpoint()
         if query.casefold() in {q.casefold() for q in queries}:
             return
         if len(queries) >= MAX_QUERIES or time.monotonic() >= deadline:
             notices.append('조사 예산에 도달하여 추가 검색을 종료했습니다.')
             return
+        stage('search', '전문가의 Wiki와 담당 논문에서 관련 근거를 검색하고 있습니다.')
         queries.append(query)
         ranked, messages = retrieve(query, ids, limit=60,glossary=glossary)
+        checkpoint()
         results.append(ranked)
         notices.extend(messages)
         trace['searches'].append(dict(query=query, terminology=query_rules(query,glossary), candidates=[dict(id=r['id'], kind=r['kind'],
@@ -145,6 +161,8 @@ def answer(request, llm=None):
             input_hash=r['input_hash']) for r in ranked]))
 
     search(request.question)
+    if conversation:
+        search(contextual_query(request.question, conversation))
     if llm.configured and prompts:
         try:
             plan = call('plan', dict(question=request.question, experts=_profiles(ids, state, {})))
@@ -155,6 +173,7 @@ def answer(request, llm=None):
             notices.append(str(error))
 
     def assemble():
+        stage('evidence', '질문과 연결된 주장·수치·실험 조건을 모으고 있습니다.')
         return build_evidence(_merge(results), ids, store=store, state=state,
                               catalogue=catalogue, budget=budget)
 
@@ -249,6 +268,7 @@ def answer(request, llm=None):
                  paper_hashes={pid: state['papers'][pid]['hash'] for pid in paper_ids},
                  wikis=bundle['wikis'], generated_sections=raw_groups,
                  published_sections=groups, usage=getattr(llm, 'usage_history', []))
+    stage('verify', '근거의 최신 상태를 확인하고 답변을 정리하고 있습니다.')
     _, latest, valid = load_catalogue()
     stale = any(eid not in latest['experts'] or latest['experts'][eid]['hash'] != state['experts'][eid]['hash'] for eid in ids)
     stale |= any(pid not in latest['papers'] or latest['papers'][pid]['hash'] != state['papers'][pid]['hash'] for pid in paper_ids)
@@ -261,6 +281,8 @@ def answer(request, llm=None):
                 read_page(row, store, valid)
     except WikiError:
         stale = True
+    checkpoint()
+    trace['history_run_ids'] = list(getattr(request, 'history_run_ids', []))
     if stale:
         save_run(run_id, request, model_identity=llm.identity, prompt=prompts.get('answer'),
             evidence=evidence, trace=trace, result={'error': 'evidence_changed'},

@@ -1,4 +1,4 @@
-"""Small local pilot, deliberately separate from fictional prototype records."""
+"""SQLite schema initialization and shared research data connections."""
 from __future__ import annotations
 import os
 import sqlite3

@@ -1,6 +1,6 @@
 {
   "app": "Evidence Studio",
-  "release": "github-public-2026-10-14",
+  "release": "github-conversations-2026-10-14",
   "database": "Absent; schema and baseline settings initialize on first launch.",
   "wiki": "Empty; documents are regenerated after ingest.",
   "raw_pdf_count": 0,
@@ -30,18 +30,18 @@
     },
     {
       "path": ".gitignore",
-      "bytes": 555,
-      "sha256": "faa40302d90eed305124a88007cfdb333c44a865f8a3406b851800fd4ba73f3b"
+      "bytes": 515,
+      "sha256": "c8aef75eed5b380d24e736b7462661f1fd1a88ea8b342cf3bf7a78e8b8468d17"
     },
     {
       "path": "README.md",
-      "bytes": 4584,
-      "sha256": "780cfc79c35696549cdb6adc9900f11de11c92d99c5c4f1723a9d1449914fab1"
+      "bytes": 5169,
+      "sha256": "7252a5d610a552405c4254eabfb8a1e814debf46d635786582a62ae2d1b807a4"
     },
     {
       "path": "backend/__init__.py",
-      "bytes": 75,
-      "sha256": "5bf71f4bb88f09df3a5cf80b89956005d65eb80dc8562e24d4c86c2d9464d8d9"
+      "bytes": 43,
+      "sha256": "fc1d2e41bfb96d3126b676fb20babf2770a8fb0054452e067338f860da61bfa1"
     },
     {
       "path": "backend/abstract_summaries.py",
@@ -77,6 +77,11 @@
       "path": "backend/chunking.py",
       "bytes": 16523,
       "sha256": "ea9a80abb665299fff33347e5097d76159249a62eeed4b96bfd2bf400c1f3893"
+    },
+    {
+      "path": "backend/conversation_context.py",
+      "bytes": 1385,
+      "sha256": "efe05428762fac460b0e5270cfb377d312eb9e4089f6542ca8ca8bcf547913f6"
     },
     {
       "path": "backend/embedding_adapter.py",
@@ -115,13 +120,13 @@
     },
     {
       "path": "backend/llm_client.py",
-      "bytes": 3778,
-      "sha256": "d440a0852e357638ec747a07991f979c5e6b1fd19d0a8d1df54befeeed319d2c"
+      "bytes": 3866,
+      "sha256": "0e03da669acae491d3e0d4a53f15d9413c88a02aea138b9abe8c9460f83224be"
     },
     {
       "path": "backend/main.py",
-      "bytes": 3797,
-      "sha256": "35594175cb959503ad221f927a61ff5ea482843b88c48e9313576b6cb06a7ba6"
+      "bytes": 2330,
+      "sha256": "e70d532713367e77db16c28b0dca8923d18986bb2390aeb5fbaa4a680d11ffcf"
     },
     {
       "path": "backend/page_review.py",
@@ -140,8 +145,8 @@
     },
     {
       "path": "backend/pilot_db.py",
-      "bytes": 4903,
-      "sha256": "32ebf961419b20b01b2dfe0147e7ee121503446e4840595bce93a3f01b45eef0"
+      "bytes": 4895,
+      "sha256": "ceb01de9701d676ee9e2523d30e851d65140c6ef3cd420f729a80f36e752f469"
     },
     {
       "path": "backend/pilot_ingest.py",
@@ -165,23 +170,23 @@
     },
     {
       "path": "backend/prompts/research_plan.txt",
-      "bytes": 728,
-      "sha256": "0c239df9b5430e357bd8170a47e88e9ab6d4d556ecc8f1fe6e40b3f612fb84d3"
+      "bytes": 1111,
+      "sha256": "181bd25aad03e2c195229bc4d12ab0c40b0d34aa97ed4784edc6208134af01df"
     },
     {
       "path": "backend/prompts/research_refine.txt",
-      "bytes": 674,
-      "sha256": "5ac68448d67c1dab3e96a7f6b131d7b3384c3b7b77ebfc8fdd3457fd51568285"
+      "bytes": 1057,
+      "sha256": "1e956beaa8406f8c38bd96eee365a617d5faeb06ad4a4dec4587c746841cbb81"
     },
     {
       "path": "backend/prompts/research_review.txt",
-      "bytes": 1225,
-      "sha256": "73d8d054dd35aaede5378d4de97a2f6596c55e68f3069c155482e6bbfc127fea"
+      "bytes": 1608,
+      "sha256": "13fa01b03294f87b36952194cc20f7f2131efbce9e9f546f6784a0e5f02c7bb9"
     },
     {
       "path": "backend/prompts/wiki_answer.txt",
-      "bytes": 2852,
-      "sha256": "537527e506946c3cbedc35e7b534f80d5631bccdea092dbaead603fe98d4170f"
+      "bytes": 3235,
+      "sha256": "362db00a2fdad306d0a55a9d63e8efb77251eed2c2633857de807439575eeb51"
     },
     {
       "path": "backend/prompts/wiki_compile.txt",
@@ -224,6 +229,16 @@
       "sha256": "4be6a805e0e12d723ad234b963e0339ff92d279ab2d55ae6a68a70732d0ea1ef"
     },
     {
+      "path": "backend/research_progress.py",
+      "bytes": 792,
+      "sha256": "0b7fcc3ea5a9f1e86f95eb2f0b3019a1ef1778a541c314004666cdefbc90c229"
+    },
+    {
+      "path": "backend/research_stream.py",
+      "bytes": 4732,
+      "sha256": "726233a82fe6bce33eb7609e15fe174ab426d1f1fc7ae2bfba5eba881fade3ff"
+    },
+    {
       "path": "backend/scientific_values.py",
       "bytes": 1398,
       "sha256": "69f691d4770c48692fc624b7e89930ac5f04c49919e57e76e56dae60157b547a"
@@ -255,13 +270,13 @@
     },
     {
       "path": "backend/wiki_answer.py",
-      "bytes": 15072,
-      "sha256": "5e7977092547d91406fc39c0ae192359e3dc3b6a6fb3dca335aededcad5aac69"
+      "bytes": 16467,
+      "sha256": "b02cf89ec4f16d1f7c820650c5bf6b03f38cc4dd05c51ba9cc8cd89ef124fe44"
     },
     {
       "path": "backend/wiki_api.py",
-      "bytes": 13953,
-      "sha256": "5cabea73c807bc97ccb8213c506725b0577f40295162f9889d2459463b5c278a"
+      "bytes": 14025,
+      "sha256": "2d4190e37336a57a941c50d735bd1b90e653745ac61e3a98628a5d1ae5fe315a"
     },
     {
       "path": "backend/wiki_engine.py",
@@ -294,29 +309,29 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
-      "path": "dist/assets/index-C7cl70nc.css",
-      "bytes": 122173,
-      "sha256": "d074fa668a21dc440ddcf66f3e4bf6b3e50033692169acfbee3c31cc380e59ef"
+      "path": "dist/assets/index-BiI_NDBs.js",
+      "bytes": 487499,
+      "sha256": "69aaab6de64ca5c36b0f64168541040942e18afb87660a01f6b4514c2007a86f"
     },
     {
-      "path": "dist/assets/index-CUfE4og6.js",
-      "bytes": 482963,
-      "sha256": "d752b186029d108029e870ff5847ec597addeaf9c2231f89a955aeb464b0edb8"
+      "path": "dist/assets/index-hGyG7S2Z.css",
+      "bytes": 66545,
+      "sha256": "83e519a74bb8a148c55e11182f6170a3723a25b9e6c01d7846c07d91841fe2c1"
     },
     {
       "path": "dist/index.html",
       "bytes": 848,
-      "sha256": "bead1d768eb77962a10eae99d93e39e0bbfbd56a517e563afd378a18ee610374"
+      "sha256": "91f20a951bad18c8476ec96d54b7487ddb1c955e60d3cf33d589b836a53f4ff3"
     },
     {
       "path": "docs/DATABASE_PLAN.md",
-      "bytes": 48801,
-      "sha256": "c91182afedb5cee91f99d0cb0773cb646eee9045df4c929f201c76f3b686c922"
+      "bytes": 5366,
+      "sha256": "8174bf99a23cfc3835680092628aa9a59a781f0f852989dfb3cd3cbbfa275bbd"
     },
     {
       "path": "docs/EXPERT_KNOWLEDGE_PLAN.md",
-      "bytes": 33144,
-      "sha256": "4f8f0db514ca31f665a0d40a46cce1b95271a3972a3612f0ae824c291c0ef34c"
+      "bytes": 5170,
+      "sha256": "eda1f0d59a6e22c16981cb64a3a6010d03ed8ff9f93e790aa56f212d4ef09f49"
     },
     {
       "path": "docs/GITHUB_TRANSFER.md",
@@ -325,28 +340,18 @@
     },
     {
       "path": "docs/HANDOFF.md",
-      "bytes": 11053,
-      "sha256": "939fcc500355c7ef050013692c3893a1e75f9c2bf932bd03e66574fcc6c8369b"
-    },
-    {
-      "path": "docs/LOCAL_PILOT.md",
-      "bytes": 17922,
-      "sha256": "5bf6be8bc4412b07f2c06e4f790467945d342e218f404d1287ebe3573a987625"
+      "bytes": 11170,
+      "sha256": "cff971e1505e6480db41b0676599d0fff2e0de792dbfafb54aeba248c176c2cd"
     },
     {
       "path": "docs/MARKDOWN_WIKI.md",
-      "bytes": 24502,
-      "sha256": "422937ef6d3452125b23d7b18aaa83d2f58b86a57b948499251843479b5476ad"
-    },
-    {
-      "path": "docs/PILOT_PARITY_REVIEW.md",
-      "bytes": 6485,
-      "sha256": "121b2fbc3968a43a02339dbbd027bafd71a60040640e0f0c0d2c288642479668"
+      "bytes": 23966,
+      "sha256": "7b4d267c717ecf8494d253588d4d84c480fa0a945838bc48012213a325a16cb4"
     },
     {
       "path": "docs/REPORT_AI_REFERENCE.md",
-      "bytes": 9229,
-      "sha256": "2e023b9adad43288c04017d72368cf8036ba0e8dfd1f762ddece5374280ef8bc"
+      "bytes": 1751,
+      "sha256": "4324eb570b85898c93b235679a1e22a64c7ca036b5c6d34f71b83296818c9055"
     },
     {
       "path": "docs/RESEARCH_EVALUATION.md",
@@ -355,23 +360,18 @@
     },
     {
       "path": "docs/RESEARCH_QA.md",
-      "bytes": 14457,
-      "sha256": "d6d005aeb5d9f5e2958f3d7b782202e6ef707bd7455629fc46cb53018f0f1ab6"
-    },
-    {
-      "path": "docs/SYSTEM_REVIEW.md",
-      "bytes": 14339,
-      "sha256": "266f1a92faa6728b9a153e2db3b0bf301157a2a2abbc677792730a97a7b8ed83"
+      "bytes": 11978,
+      "sha256": "11f3f7fc5ddaa811939984a410e25a1d5fbe620fa7b43729cb8290b966aecf9c"
     },
     {
       "path": "docs/TERMINOLOGY.md",
-      "bytes": 9432,
-      "sha256": "b5ab134b352cb0abcf20a1645592739c060dfa083964314b6ee95bb846d4e060"
+      "bytes": 9117,
+      "sha256": "a1ae4a3227d42be51f5d34696e69565deb2e03e985bf5d584f0a8fad157a93cc"
     },
     {
       "path": "docs/USER_ACCESS.md",
-      "bytes": 6138,
-      "sha256": "f82261ff322eddc4daa8def1baf887efa8f55c97ac38c3de67cbe3a7b28f7e31"
+      "bytes": 6084,
+      "sha256": "ab4752a53b26e9168401e357045cf53a5769c9660340d74fb306064cd542b419"
     },
     {
       "path": "docs/evidence-studio-introduction.html",
@@ -385,8 +385,8 @@
     },
     {
       "path": "package.json",
-      "bytes": 657,
-      "sha256": "cdaa9303356b8162afbb57932d79c85a507192d4c2d8ad17794b941296e37755"
+      "bytes": 650,
+      "sha256": "870fdd60f8209bcab96dc56059a3478874ea77049f13f6dcee3a3f9dad443b07"
     },
     {
       "path": "pnpm-lock.yaml",
@@ -409,19 +409,9 @@
       "sha256": "b37071e1973245e129a458bebca5feb389fed0653d514ffcdeb05d1e432c1e7d"
     },
     {
-      "path": "shared/evidence.json",
-      "bytes": 19336,
-      "sha256": "69c06179ba4cae888f13688dc1bccb0c0f6ada0f5b97cca1c1d467609a029257"
-    },
-    {
       "path": "shared/expert_facets.json",
       "bytes": 961,
       "sha256": "8a53baf7b0eefc31aa440bb54fa30de86b889c969d1a2501dedfa13f95e5addf"
-    },
-    {
-      "path": "shared/papers.json",
-      "bytes": 3950,
-      "sha256": "87112e083f12aa0693d04bea78b50038674789a411ad125f8c2de7f34c0a4c2d"
     },
     {
       "path": "shared/research_eval.example.json",
@@ -444,16 +434,6 @@
       "sha256": "7141dbc50f9ff656ce14f64a8cb1867d27dfab6447133ac47bcd87fde5944613"
     },
     {
-      "path": "src/AnswerEvidence.tsx",
-      "bytes": 5478,
-      "sha256": "80d686be7546d2eae8fc7b2a31fff258f0a547d76a2105861249836cd1ff3337"
-    },
-    {
-      "path": "src/App.tsx",
-      "bytes": 41920,
-      "sha256": "5668709d5f51d0429124c95a681190b7727932112719d77d16a49982eade9683"
-    },
-    {
       "path": "src/ExpertCreate.css",
       "bytes": 4499,
       "sha256": "d350421a61d09bd72fc3234fac64f35df4c21ac12bb1872bbe42cfeff4b94421"
@@ -474,41 +454,6 @@
       "sha256": "ebe720d616724cb899b6a1900d8780bfad3eac704d78c9a82e0e00589adc37f3"
     },
     {
-      "path": "src/ExpertJourney.tsx",
-      "bytes": 6382,
-      "sha256": "abddb69891c7596f0b945adaddca1ef1f293796720b49c40c5044de8ea21de5a"
-    },
-    {
-      "path": "src/ExpertKnowledge.css",
-      "bytes": 15997,
-      "sha256": "91542d3e938a86f31f1620289bf43d6cd8a3f7f76b52273f824e88bc7ac5fbb6"
-    },
-    {
-      "path": "src/ExpertKnowledge.tsx",
-      "bytes": 10664,
-      "sha256": "7d65c4fa3e83c4d9460b6ee8e30a85d6ee4d225888bb160caf5a53b44da4b2e5"
-    },
-    {
-      "path": "src/ExpertSettings.tsx",
-      "bytes": 12257,
-      "sha256": "d42cc23af762961170df7c5d32561d542df0afb8ee9fe5e6d48294bd850a1a23"
-    },
-    {
-      "path": "src/ExpertWiki.css",
-      "bytes": 12574,
-      "sha256": "753f23c8dfdb9e3156e9bdce13724debf2b96030293d77d7972bd5f180c4e64c"
-    },
-    {
-      "path": "src/ExpertWiki.tsx",
-      "bytes": 13088,
-      "sha256": "b7e55495a617189c3c02c03297d9b89a84eb546c0baf580b16594e2af2d469e6"
-    },
-    {
-      "path": "src/KnowledgeList.tsx",
-      "bytes": 1222,
-      "sha256": "39074dec02af0fd98a53e1f6dbddaa033336d192e5159354839fd5f6f6c71153"
-    },
-    {
       "path": "src/LibraryCategories.css",
       "bytes": 3359,
       "sha256": "563b98937e225941e25662e87bcda6238e2baff56e7b11583530f28d0ed9a6f9"
@@ -519,29 +464,14 @@
       "sha256": "fe09a3fedce86b89cc5d1dc6e614599e98e2a8931543f9dd71006d92d9c7d8b7"
     },
     {
-      "path": "src/PaperEvidence.tsx",
-      "bytes": 6392,
-      "sha256": "de6fce69d9123b6553b41f113d8090f9d4b72ae2b49476104a17fd46bee6f05f"
-    },
-    {
-      "path": "src/PaperUpload.css",
-      "bytes": 1820,
-      "sha256": "8a39a56eca9a0c62dceff3510783813c0e2c31d8fd23becb55287e82f8b3efea"
-    },
-    {
-      "path": "src/PaperUpload.tsx",
-      "bytes": 3169,
-      "sha256": "a7a74cb69f82062bbb6c0326867068bbb8b28e8b5f676158e975692644aa9a95"
-    },
-    {
       "path": "src/PilotApp.css",
       "bytes": 13738,
       "sha256": "f6df30e5907b74b87906e9141c82ee97b234cf41214f5aa6ebd030f28d2b1e61"
     },
     {
       "path": "src/PilotApp.tsx",
-      "bytes": 36635,
-      "sha256": "0328a158c270f76c682d4e5b2bad3a8aba7291df776c38fec779cfed07cff668"
+      "bytes": 35110,
+      "sha256": "60ec9e117363d94a5f8227e67826fcca2a3e44980ffd2428d7adbf8bc58a5c39"
     },
     {
       "path": "src/PilotLayout.css",
@@ -564,19 +494,19 @@
       "sha256": "5ff28ff5d03593f634a8e1937cd761a913d26c115ad1f35d1fa7cb3df23b300a"
     },
     {
-      "path": "src/QuestionOptions.css",
-      "bytes": 4954,
-      "sha256": "e89c81b4fa6be6c2826fccd262296811a0455d35dca552c3547e0b889492d72d"
-    },
-    {
-      "path": "src/QuestionOptions.tsx",
-      "bytes": 6755,
-      "sha256": "aeb5d419adfca4b78f2ae13d3adf8cc77c22c0e35413d07253bbbf03da18f3b8"
-    },
-    {
       "path": "src/ResearchAnswerView.tsx",
       "bytes": 2204,
       "sha256": "c4ad6420fca3ae53045ab7d3e48b86f4364331ff339fda344e3ec0e6a071f408"
+    },
+    {
+      "path": "src/ResearchConversation.css",
+      "bytes": 2540,
+      "sha256": "2d9a8974fa19d0e7dfec94cd215db3afe41da004a7a3d56eea4c75d7f7d5bdb8"
+    },
+    {
+      "path": "src/ResearchDialogue.tsx",
+      "bytes": 4335,
+      "sha256": "80faa75dd892411e71bb55a61a0bddecd972e193eee1743f4fa47c2e200d0b22"
     },
     {
       "path": "src/SourceReviews.css",
@@ -615,43 +545,13 @@
     },
     {
       "path": "src/access.ts",
-      "bytes": 658,
-      "sha256": "d6ffe50c3f7a8876853ac93af51cd4436752efd3433bd50527e6c7399073db97"
-    },
-    {
-      "path": "src/answerSelection.ts",
-      "bytes": 8683,
-      "sha256": "be4909c0c3c38d6cf6861ab7f1a26788947c5751d5299d6a4476c5533ca2e320"
-    },
-    {
-      "path": "src/api.ts",
-      "bytes": 626,
-      "sha256": "bf66e9ece2e7ef98a80b373d441e7fc4a12ee2b0455a2316b3dd0d4f1e494578"
-    },
-    {
-      "path": "src/data.ts",
-      "bytes": 2843,
-      "sha256": "6734bc3e0e3f20e7e4912fd46ea1eadfe02aa379bc13d3282f5dd5509ef84efb"
-    },
-    {
-      "path": "src/evidence.ts",
-      "bytes": 1053,
-      "sha256": "f1e7b4ea8e16767296e711f67838447f923b336d78dc5f3d02725c5fd34a7139"
-    },
-    {
-      "path": "src/experts.ts",
-      "bytes": 7978,
-      "sha256": "778ffd39169ebfbd1d1212490c2d3571377856592b6b5948053d8c545f7db8ca"
+      "bytes": 179,
+      "sha256": "6e6607c442265375a265ba8b9c69cdcfdf7982c1e7bdc8a39609c86c9bc945f0"
     },
     {
       "path": "src/identity.ts",
       "bytes": 969,
       "sha256": "1ba3dc2aa40da64b8fb792b3fda6dd2d1b1a98a1f5ed58f25a0755dd1c46fb36"
-    },
-    {
-      "path": "src/knowledge.ts",
-      "bytes": 7523,
-      "sha256": "ca7c9f739c988d7596216eaa79ef4753afe72be73303e7fb9b4dc61bba444ea5"
     },
     {
       "path": "src/main.tsx",
@@ -660,13 +560,18 @@
     },
     {
       "path": "src/pilotData.ts",
-      "bytes": 6217,
-      "sha256": "81043f72fcdb5043c605ea5a7d71ff1b4515e0ef9ec7aaed28d18ce8c485549b"
+      "bytes": 6444,
+      "sha256": "1551a4ea683fa1d910e5392ef3b73f446865d759abc409e1945705cf8cffc071"
     },
     {
       "path": "src/researchAnswer.ts",
       "bytes": 1571,
       "sha256": "6684f19aaea8b2b6f660728e89e426caf80b92dc4098753cab7fcd82e6e408ae"
+    },
+    {
+      "path": "src/researchConversation.ts",
+      "bytes": 4057,
+      "sha256": "252fa5ff71233c30768474961761615754e7e7b5b66c07780cf2d430076b0abe"
     },
     {
       "path": "src/scientificNotation.ts",
@@ -675,18 +580,8 @@
     },
     {
       "path": "src/styles.css",
-      "bytes": 61892,
-      "sha256": "58c884bb152cdff460687ce24b5e3a20a8ad6025471f92e0a47b9ef6decde3f4"
-    },
-    {
-      "path": "src/terminology.ts",
-      "bytes": 855,
-      "sha256": "a49de931e3c766925ab2f2055668483a6f3b86d157f5f95f4ddedbf18fa27571"
-    },
-    {
-      "path": "src/types.ts",
-      "bytes": 3211,
-      "sha256": "6c813e0085b1235f0a38fbd3626333d5f2e8c169fa6c9f07854e68881a0593b6"
+      "bytes": 3358,
+      "sha256": "b6f108d4577750958bba5da17207e9da401ff9d61353db6944183a01846dc19b"
     },
     {
       "path": "src/vite-env.d.ts",
@@ -694,29 +589,19 @@
       "sha256": "65996936fbb042915f7b74a200fcdde7e410f32a669b1ab9597cfaa4b0faddb5"
     },
     {
-      "path": "src/wiki.ts",
-      "bytes": 10312,
-      "sha256": "e5bcda03d809f04c4c1cb84ce3347bf570e61bc4ad01c09fe9f10e098b894b05"
-    },
-    {
       "path": "src/workspaceState.ts",
       "bytes": 700,
       "sha256": "25a1093dbdbd190be0f9181794f719d08d48123b1790cc0060f190940af5a934"
     },
     {
-      "path": "tests/answer-selection.test.mjs",
-      "bytes": 6408,
-      "sha256": "e8e3c55051919296aabe7cc8ff69f377dcabf263969ac1e9bd57d20d437dddd2"
-    },
-    {
-      "path": "tests/evidence.test.mjs",
-      "bytes": 11304,
-      "sha256": "7476ed61d62d1cb0098579913e0bf14178849b84261a229c5c4149e9c5e28ccd"
-    },
-    {
       "path": "tests/research-answer.test.mjs",
       "bytes": 3190,
       "sha256": "47b4deadc1d09dd4f79de1c1209bbf6672d5e48e495cce2254971e690f3766f6"
+    },
+    {
+      "path": "tests/research-conversation.test.mjs",
+      "bytes": 3337,
+      "sha256": "501eb39f6cf722fd5b1a50a7dce9679c79cfbc07b61cc31af262f7ccef126f51"
     },
     {
       "path": "tests/scientific-notation.test.mjs",
@@ -744,6 +629,11 @@
       "sha256": "1cefc48d04a348bc504fe4874c0af53c83f99a1190e195bf2738c94ebbb76fdf"
     },
     {
+      "path": "tests/test_app_routes.py",
+      "bytes": 2263,
+      "sha256": "65775941f4b5a9422cc65be936a78c98efe36d4ca1b6882bfcb61c6b2c6fa411"
+    },
+    {
       "path": "tests/test_auth.py",
       "bytes": 12699,
       "sha256": "50b316dad061e49b7aa3b41136006e6a4b6881b693c2e257ca988fb7e92c7906"
@@ -752,6 +642,11 @@
       "path": "tests/test_chunking.py",
       "bytes": 8490,
       "sha256": "43aa3c7965ccb10dcebee8b57fbe8fe59396a1a64b36c77247793be5d10a5a38"
+    },
+    {
+      "path": "tests/test_conversation.py",
+      "bytes": 7898,
+      "sha256": "8f663d3e05f21b1a6ebec0eee8f1acc25ab223b4543de34d64a38d2419d41b99"
     },
     {
       "path": "tests/test_expert_knowledge_inventory.py",
@@ -824,11 +719,6 @@
       "sha256": "a0a61b84dc2105bf4b88206b8da29fe518e523876e3d4fc5317b318c7676ea71"
     },
     {
-      "path": "tests/wiki.test.mjs",
-      "bytes": 9066,
-      "sha256": "ddb6b552b657454f4e2cc5e9134f5d96b9a423b75e55dff4e1e533c7b8714139"
-    },
-    {
       "path": "tests/workspace-state.test.mjs",
       "bytes": 1367,
       "sha256": "ff3db2e408494a8518902cf9f27e7080c7d501edd35893c2b40f69a66adea934"
@@ -852,5 +742,12 @@
   "source_zip_sha256": "e280efc26fa09870f8f459c9638f38a48f07621079a9ddf58c5ac7f6b21d7314",
   "repository": "https://github.com/comkdy/evidence-studio",
   "visibility": "public",
-  "bootstrap_admin": "Read BOOTSTRAP_ADMIN_EMPLOYEE_ID from the untracked .env; local-only demo identity when unset."
+  "bootstrap_admin": "Read BOOTSTRAP_ADMIN_EMPLOYEE_ID from the untracked .env; local-only demo identity when unset.",
+  "validation": {
+    "backend_tests": 219,
+    "frontend_tests": 16,
+    "frontend_build": "passed",
+    "external_model_calls": false,
+    "conversation_browser_check": "isolated synthetic data and deterministic test model"
+  }
 }

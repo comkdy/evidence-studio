@@ -26,8 +26,7 @@ wiki/*
 *.tar.gz
 *.log
 
-# New company PDFs stay local unless deliberately added.
-# The original 41 PDFs are explicitly staged for this one-time handoff.
+# Original and newly added PDFs stay local; the public repository contains app code only.
 raw/*
 !raw/.gitkeep
 

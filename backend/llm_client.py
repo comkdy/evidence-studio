@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 from urllib.request import Request, build_opener, HTTPSHandler
 from .ai_settings import load_ai_settings
 from .embedding_client import NoRedirect
+from .research_progress import checkpoint
 
 
 class LLMError(ValueError):
@@ -29,6 +30,7 @@ class CompanyLLM:
         return self.service.model + ':' + hashlib.sha256(self.service.base_url.encode()).hexdigest()[:16]
 
     def complete_json(self, system, payload):
+        checkpoint()
         if not self.configured:
             raise LLMError('사내 LLM 주소·모델·API key를 설정해야 합니다.')
         endpoint = self.service.base_url.rstrip('/')
@@ -48,6 +50,7 @@ class CompanyLLM:
                           headers={'Authorization': 'Bearer '+key, 'Content-Type': 'application/json'}, method='POST')
             with build_opener(NoRedirect(), HTTPSHandler(context=ssl.create_default_context())).open(req, timeout=self.timeout_seconds) as response:
                 raw = response.read(2_000_001)
+            checkpoint()
             if len(raw) > 2_000_000:
                 raise LLMError('LLM 응답이 너무 큽니다.')
             envelope = json.loads(raw)
