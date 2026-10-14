@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
@@ -20,10 +21,20 @@ class ModelSettings:
 
 
 @dataclass(frozen=True)
+class InferenceLimits:
+    llm_timeout_seconds: float = 300
+    llm_queue_timeout_seconds: float = 300
+    llm_max_concurrent_requests: int = 2
+    research_timeout_seconds: float = 1500
+    reranker_timeout_seconds: float = 30
+
+
+@dataclass(frozen=True)
 class AISettings:
     llm: ModelSettings
     embedding: ModelSettings
     reranker: ModelSettings
+    limits: InferenceLimits = field(default_factory=InferenceLimits)
 
 
 def load_ai_settings(
@@ -48,4 +59,25 @@ def load_ai_settings(
     llm = ModelSettings(value("LLM_BASE_URL"), value("LLM_MODEL"), SecretStr(value("LLM_API_KEY")))
     embedding = ModelSettings(value("EMBEDDING_BASE_URL"), value("EMBEDDING_MODEL"), SecretStr(value("EMBEDDING_API_KEY")))
     reranker = ModelSettings(value("RERANKER_BASE_URL"), value("RERANKER_MODEL"), embedding.api_key)
-    return AISettings(llm=llm, embedding=embedding, reranker=reranker)
+    def seconds(name, default, upper=1800):
+        try:
+            result = float(value(name) or default)
+            if not math.isfinite(result) or not 1 <= result <= upper:
+                raise ValueError()
+            return result
+        except ValueError:
+            raise ValueError(f"{name} must be between 1 and {upper} seconds") from None
+
+    try:
+        concurrency = int(value("LLM_MAX_CONCURRENT_REQUESTS") or 2)
+        if not 1 <= concurrency <= 8:
+            raise ValueError()
+    except ValueError:
+        raise ValueError("LLM_MAX_CONCURRENT_REQUESTS must be an integer between 1 and 8") from None
+    limits = InferenceLimits(
+        llm_timeout_seconds=seconds("LLM_TIMEOUT_SECONDS", 300),
+        llm_queue_timeout_seconds=seconds("LLM_QUEUE_TIMEOUT_SECONDS", 300),
+        llm_max_concurrent_requests=concurrency,
+        research_timeout_seconds=seconds("RESEARCH_TIMEOUT_SECONDS", 1500, 7200),
+        reranker_timeout_seconds=seconds("RERANKER_TIMEOUT_SECONDS", 30))
+    return AISettings(llm=llm, embedding=embedding, reranker=reranker, limits=limits)

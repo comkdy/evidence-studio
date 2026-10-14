@@ -20,7 +20,7 @@ PDF·claim·measurement·condition은 원천 근거를 보존한다. Wiki는 공
 
 - 심층: 계획 → 추가 검색 → 근거 충분성 검토와 보완 검색 → 답변 → 진술별 내용 검토 순서다. 계획·충분성·답변·내용 검토의 LLM 호출은 최대 4회, 원질문 포함 검색 질의는 최대 6개다. 중복 질의는 실행하지 않는다.
 - 근거 예산은 48,000자이고, 공통 evidence pool을 전문가별로 복제해서 보내지 않는다. 각 모델 입력은 지침 포함 100,000자 이하다. 이는 token 한도와 같지 않으므로 사내 모델 tokenizer/context에 맞춘 검증이 필요하다.
-- 새 작업 시작 예산은 240초다. LLM에는 남은 시간을 timeout으로 전달한다. 이미 시작된 embedding/reranker 호출에는 자체 timeout이 있으므로 엄격한 전체 wall-clock 상한은 아니다. 추천 처리는 위 답변 예산과 별도이며 스트림에서는 같은 요청 안에서 먼저 수행한다.
+- 새 작업 시작·LLM 결과 채택 예산은 RESEARCH_TIMEOUT_SECONDS로 설정하며 기본 1,500초다. 각 LLM I/O 대기는 LLM_TIMEOUT_SECONDS(기본 300초)와 남은 예산 중 작은 값으로 제한한다. LLM 호출 슬롯 대기도 전체 예산에 포함하고, 예산 이후 도착한 LLM 결과는 사용하지 않는다. 이미 시작된 embedding/reranker 호출과 socket 읽기는 별도 timeout을 사용하므로 엄격한 전체 wall-clock 상한은 아니다. 추천 처리는 답변 예산과 별도이며 스트림에서는 같은 요청 안에서 먼저 수행한다.
 - 지침은 작업 시작 시 고정한다. 지침 부재·잘못된 응답·검토 실패·예산 소진 시 실패를 숨기지 않고 확인 가능한 검색 근거를 제공한다. 사내 LLM 미설정 상태를 생성된 답변으로 표시하지 않는다.
 
 응답은 기존 `claims`, `hits`, `answers`, `note` 외에 `synthesis`, `research`, `run_id`를 포함한다. `claims/hits`는 검색해서 검토에 제공한 근거 목록이며 모두가 최종 답변에 인용됐다는 뜻은 아니다. 실제 사용 근거는 문장 인용과 실행 기록에 있다. `research`는 mode·queries·rounds·paper_count·limitations·validation_status를 제공한다.
@@ -39,7 +39,7 @@ PDF·claim·measurement·condition은 원천 근거를 보존한다. Wiki는 공
 
 기존 스키마를 유지하며 `answer_runs`만 추가한다. 서버 시작의 `initialize()`가 idempotent하게 적용한다. 원천 claim·수치·조건·Wiki를 변환하거나 삭제하지 않는다. 운영 DB 변경 전 온라인 백업을 권장한다.
 
-질문·모델 식별자·지침 hash·검색 순위와 제외 이유·전문가/논문 hash·당시 evidence·생성/게시 결과·지연·API가 반환한 token usage를 불변 snapshot으로 저장한다. API가 usage를 제공하지 않으면 사용량을 추정값으로 채우지 않는다. 서비스 주소·키·인증 쿠키는 기록하지 않는다.
+질문·모델 식별자·지침 hash·검색 순위와 제외 이유·전문가/논문 hash·당시 evidence·생성/게시 결과·지연·API가 반환한 token usage를 불변 snapshot으로 저장한다. API가 usage를 제공하지 않으면 사용량을 추정값으로 채우지 않는다. 단계별 소요 시간과 LLM 호출별 대기 포함 elapsed_ms·입력 문자 수도 기록한다. 서비스 주소·키·인증 쿠키는 기록하지 않는다.
 
 `GET /api/pilot/answer-runs/{run_id}`와 그 아래 `/claims/{claim_id}`는 **요청 소유자만** 조회할 수 있다. 관리자도 다른 소유자의 기록을 조회할 수 없다. 답변의 claim 인용은 당시 snapshot을 열고 Wiki 인용은 revision을 고정한다. 원본 DB 교정 후에도 snapshot은 바뀌지 않는다.
 
@@ -65,7 +65,7 @@ PostgreSQL/ANN 전환, 논리적 논문과 PDF 버전 분리, claim/measurement 
 
 중지 버튼·페이지 이동·새 대화 시작은 fetch를 abort한다. 서버는 연결 종료를 감지하고 단계 사이와 모델/검색 반환 후 취소 여부를 확인하여 이후 작업과 답변 저장을 중단한다. 이미 실행 중인 외부 HTTP 요청은 해당 API의 반환 또는 timeout까지 계속될 수 있고 제공자의 연산·과금을 취소한다고 보장하지 않는다. 완료가 중지보다 먼저 저장된 경우 서버 snapshot이 남을 수 있다. 취소 상태도 브라우저 대화에 남아 이어서 질문할 수 있다.
 
-한 서버 프로세스당 스트림 작업은 최대 4개다. 중지된 외부 호출이 아직 반환되지 않았다면 해당 slot은 완료 전까지 점유한다. 이는 프로세스 내 과부하 방지이며 분산 작업 큐가 아니다.
+한 서버 프로세스당 스트림 작업은 최대 4개다. Wiki·lint·기존 JSON 질의 API도 공유하는 실제 LLM 호출 한도는 LLM_MAX_CONCURRENT_REQUESTS(기본 2개)다. 대기는 FIFO이며 최대 LLM_QUEUE_TIMEOUT_SECONDS(기본 300초) 또는 남은 답변 예산까지다. 대기 중 취소하면 HTTP를 보내지 않으며, 이미 보낸 호출의 slot은 반환/timeout 전까지 유지한다. 대기·모델 생성 상태를 구분해 표시한다. timeout/HTTP 408·504 또는 혼잡/HTTP 429·503이 발생한 질문은 후속 LLM 단계를 더 호출하지 않고 확보한 근거와 실패 사유를 반환한다. 이는 프로세스 내 과부하 방지이며 분산 작업 큐가 아니다.
 
 이전 단일 질문 기록은 한 턴의 대화로 다시 열 수 있다. 브라우저가 닫혀 남은 pending 기록은 재개 중인 것처럼 표시하지 않고 중단 상태로 복원한다. 대화 목록·공유 표시는 브라우저 저장이며 실제 사용자 간 동기화는 별도 범위다.
 

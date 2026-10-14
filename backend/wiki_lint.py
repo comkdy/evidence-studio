@@ -63,6 +63,11 @@ def run_lint(database=None, *, due_only=False, use_llm=True, llm=None):
     store = WikiStore(database)
     llm = llm or CompanyLLM()
     stamp = now()
+    # A slow configured model can legitimately exceed the old fixed stale cutoff.
+    from .ai_settings import load_ai_settings
+    limits = load_ai_settings().limits
+    stale_after = max(timedelta(hours=4), timedelta(seconds=MAX_LLM_CALLS *
+                      (limits.llm_timeout_seconds + limits.llm_queue_timeout_seconds + 60)))
     # Reusing a previous review requires the same model AND writing rules.
     model=(llm.identity if use_llm and llm.configured else 'offline')+':rules:'+prompt.fingerprint+':terms:'+str(glossary['revision'])
     with connect(database) as db:
@@ -70,7 +75,7 @@ def run_lint(database=None, *, due_only=False, use_llm=True, llm=None):
         previous = db.execute('SELECT * FROM wiki_lint_runs ORDER BY created_at DESC LIMIT 1').fetchone()
         if previous:
             elapsed = datetime.now(timezone.utc)-datetime.fromisoformat(previous['created_at'])
-            if (previous['state']=='running' and elapsed<timedelta(hours=4)) or (due_only and elapsed<LINT_INTERVAL and previous['model']==model):
+            if (previous['state']=='running' and elapsed<stale_after) or (due_only and elapsed<LINT_INTERVAL and previous['model']==model):
                 return {'status':'not_due','next_check_at':(datetime.fromisoformat(previous['created_at'])+LINT_INTERVAL).isoformat()}
         run_id = 'lint-'+uuid4().hex
         report_path = f'.reports/{run_id}.md'
@@ -138,11 +143,12 @@ def run_lint(database=None, *, due_only=False, use_llm=True, llm=None):
                             raise WikiError('LLM lint가 검사 문서에 없는 구절을 지적했습니다.')
                         page_findings.append(dict(page_id=row['id'],**item))
                     next_offset=min(len(body),start+14000)
-                complete=next_offset>=len(body)
-                if next_offset>start_offset:
+                    # Checkpoint every successful piece, even if a later request times out.
                     with connect(database) as db:
                         db.execute('INSERT OR REPLACE INTO wiki_lint_checks VALUES(?,?,?,?,?,?)',
-                            (row['id'],row['content_hash'],stamp,model,json.dumps(page_findings,ensure_ascii=False),0 if complete else next_offset)); db.commit()
+                            (row['id'],row['content_hash'],stamp,model,json.dumps(page_findings,ensure_ascii=False),
+                             0 if next_offset>=len(body) else next_offset)); db.commit()
+                complete=next_offset>=len(body)
                 findings.extend(page_findings)
                 checked += int(complete)
             except (WikiError, LLMError) as error:

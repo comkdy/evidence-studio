@@ -133,3 +133,51 @@ Wiki LLM 호출도 DB 트랜잭션 밖에서 수행합니다. Wiki 저장·작�
 4. 이전 버전에서 PDF 오류로 잘못 기록된 ingest는 자동으로 판별하지 않습니다. 해당 실패 기록과 실제 논문 등록 여부를 따로 확인하세요. 실패한 PDF 전체를 무조건 재분석하지는 않습니다.
 
 SQLite의 쓰기는 여전히 한 번에 하나씩 처리됩니다. 서버는 기존 안내대로 단일 프로세스로 실행하고 전체 코퍼스 reindex CLI는 서버를 중지한 점검 시간에 실행하세요. 이 수정은 긴 모델 대기로 인한 쓰기 잠금 점유와 일시적 경쟁의 실패 처리를 개선하며, 사내 모델의 실제 지연·스토리지 환경은 사내에서 추가 확인해야 합니다.
+
+
+## 8. 느린 사내 LLM과 timeout 설정
+
+LLM 대기는 코드의 고정 90초에서 기본 300초로 변경했습니다. 기존 .env에 설정이 없어도 새 기본값이 적용됩니다. 값을 바꾸려면 기존 .env에 아래 항목을 추가하고 앱 서버를 재시작하세요. 키가 있는 .env를 .env.example로 덮어쓰지 않습니다.
+
+~~~dotenv
+LLM_TIMEOUT_SECONDS=300
+LLM_MAX_CONCURRENT_REQUESTS=2
+LLM_QUEUE_TIMEOUT_SECONDS=300
+RESEARCH_TIMEOUT_SECONDS=1500
+~~~
+
+| 설정 | 의미 | 기본값 |
+|---|---|---|
+| LLM_TIMEOUT_SECONDS | LLM 한 번 호출의 socket I/O 대기 한도 | 300초 |
+| LLM_MAX_CONCURRENT_REQUESTS | Wiki·질문·lint가 공유하는 프로세스별 실제 LLM 호출 수 | 2 |
+| LLM_QUEUE_TIMEOUT_SECONDS | LLM 호출 슬롯을 기다리는 한도; FIFO·대기 중 취소 가능 | 300초 |
+| RESEARCH_TIMEOUT_SECONDS | 심층 질문의 새 작업 시작·LLM 결과 채택 예산; 호출 대기도 포함 | 1,500초 |
+| EMBEDDING_TIMEOUT_SECONDS | LLM과 별도인 embedding I/O 대기 한도 | 30초 |
+| RERANKER_TIMEOUT_SECONDS | LLM과 별도인 reranker I/O 대기 한도 | 30초 |
+
+시간 설정은 1~1,800초, 질문 예산은 1~7,200초, 동시 호출은 1~8을 허용합니다. 환경변수가 .env보다 우선합니다. LLM이 2개 요청도 동시에 처리하기 어렵다면 동시 호출을 1로 줄여 비교하세요. 대기 시간을 늘리는 것은 허용 대기를 늘리는 것이며 처리 속도를 높이는 것은 아닙니다.
+
+이번 점검에서 함께 보완한 부분:
+
+- 질문 코드의 별도 90초 제한과 240초 예산을 제거했습니다. 최대 4회 모델 호출은 유지하고 설정된 예산 안에서 실행합니다. 질문이 timeout/혼잡 오류를 받으면 후속 LLM 요청을 중단하고 확인 가능한 근거를 제공합니다.
+- Wiki 작업의 모델 timeout/혼잡 오류 발생 시 현재 작업은 명확한 사유로 실패를 기록하고, 다른 범위의 작업은 대기에 남깁니다. 백그라운드 워커는 60초 쉬고 다음 대기 작업을 확인합니다. 실패한 생성 요청 자체를 자동 반복하지 않습니다. 모델 서버가 여전히 처리하고 있을 가능성이 있기 때문입니다.
+- 정기 lint는 Wiki 작업이 대기/진행 중이거나 LLM 호출이 진행 중이면 시작을 미룹니다. 긴 lint는 성공한 구간마다 진행 위치를 저장하므로 다음 구간의 timeout이 앞 구간의 재분석으로 이어지지 않습니다.
+- embedding도 socket timeout/HTTP 504 뒤 동일 요청을 자동 재전송하지 않습니다. 그 밖의 일부 일시적 연결 오류·HTTP 429/502/503은 기존처럼 최대 3회 시도합니다. reranker 실패 시에는 기존 keyword/vector 순위와 안내를 사용합니다.
+- LLM timeout, 호출 슬롯 대기 초과, HTTP 429/503 혼잡, HTTP 408/504 서버 timeout, 잘못된 JSON/불완전한 응답을 구분합니다. 불완전한 JSON이나 검증되지 않은 내용을 기존 Wiki에 덮어쓰지 않습니다.
+- 앞서 수정한 모델 호출 중 DB 쓰기 잠금 해제와 Wiki lease의 30초 주기 연장을 유지합니다. 시간/동시 호출 설정만 변경해도 Wiki 입력 fingerprint는 달라지지 않으므로 기존 내용을 강제로 재생성하지 않습니다.
+
+사내에서 확인할 남은 사항:
+
+| 상황 | 해석과 확인할 점 |
+|---|---|
+| 앱을 300초로 바꿔도 정확히 60/90초쯤 HTTP 504 | LLM 서버·사내 API gateway·reverse proxy의 별도 timeout을 확인해야 합니다. 앱 설정이 상위 서비스의 제한을 늘리지는 않습니다. |
+| 서버 중지/브라우저 답변 중지 후에도 모델이 일함 | 대기열에서는 바로 취소하지만 이미 전송한 HTTP 요청은 반환/timeout까지 계속될 수 있습니다. 제공자 연산까지 취소하려면 사내 API의 취소 지원이 필요합니다. 해당 호출의 slot을 먼저 반환하지 않도록 했습니다. |
+| Wiki job 전체가 수십 분 이상 걸림 | 300초는 Wiki job 전체 제한이 아닙니다. 원문 구간 분석과 여러 단계의 종합 각각에 모델 호출이 필요합니다. 현재 원문은 페이지당 최대 10,000자씩, 종합은 최대 6개 문서씩 묶습니다. 입력 변경이 없는 부분 결과는 재사용합니다. |
+| 긴 논문/큰 주제에서만 timeout 또는 context 초과 | 현재의 문자 수 한도는 사내 모델의 token/context 한도와 같지 않습니다. 모델별 입력 한도와 출력 길이를 확인하고, 실제 측정에 따라 Wiki 입력 묶음 크기 조정이 필요할 수 있습니다. 이번 수정에서 원문을 자르거나 검토 단계를 없애지는 않았습니다. |
+| 응답은 왔으나 JSON·근거 검증 실패 | 속도와 별개의 출력 품질/형식 문제입니다. Chat Completions 응답 구조, JSON 작성 능력, finish_reason, 원문 인용을 확인하세요. 검증 기준을 낮춰 통과시키지 않습니다. |
+
+urllib의 timeout은 각 blocking operation에 적용되며 요청 전체에 대한 강제 종료 시계가 아닙니다. 질문 예산 초과 후 도착한 LLM 결과는 버리지만, 이미 진행 중인 I/O가 즉시 종료되는 것은 아닙니다. [Python urllib 문서](https://docs.python.org/3.12/library/urllib.request.html#urllib.request.urlopen)
+
+앱의 ask-stream은 heartbeat와 X-Accel-Buffering: no를 보냅니다. 앞단 프록시가 buffering을 강제하거나 다른 idle timeout을 적용하면 별도 조정이 필요합니다. nginx의 proxy_read_timeout도 전체 응답 시간이 아니라 읽기 사이 대기 제한입니다. 사내 LLM 게이트웨이 설정은 이 저장소에서 변경할 수 없습니다. [nginx proxy 문서](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_read_timeout)
+
+검증은 로컬 지연 HTTP 서버와 가상 시간·모델을 사용했습니다. 사내 API 키/논문을 외부로 전송하지 않았습니다. 사내에서는 소량의 논문으로 호출별 실제 시간, timeout/HTTP 상태, 대기열 길이를 관찰해 조정하세요. 질문별 실행 기록의 trace.model_calls와 trace.model_timings에 소요 시간이 저장됩니다. 기존 Wiki 실패는 설정 적용 후 해당 범위 갱신을 다시 요청하며, DB·Wiki 삭제나 전체 재구축은 필요하지 않습니다.

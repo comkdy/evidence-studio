@@ -12,7 +12,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from uuid import uuid4
 from .pilot_db import connect, db_path, initialize, now, write_connection, is_database_busy
-from .llm_client import CompanyLLM, LLMError
+from .llm_client import CompanyLLM, LLMError, LLMTimeoutError, LLMCapacityError
 from .wiki_store import WikiStore, WikiError, digest, safe_path, atomic_write, parse_markdown
 from .wiki_policy import load_prompt
 
@@ -559,6 +559,9 @@ def run_jobs(database=None, llm=None):
                     check_owner(db)
                     db.execute("UPDATE wiki_jobs SET state='failed',finished_at=?,error=? WHERE id=?", (now(),message,job['id']))
                 errors.append(message)
+                if isinstance(error, (LLMTimeoutError, LLMCapacityError)):
+                    # Other scopes stay queued. Give the slow/shared service a cooldown.
+                    return {'status':'failed','error':message,'retry_after_seconds':60}
         return {'status':'failed','error':errors[0]} if errors else result
     except sqlite3.OperationalError as error:
         if not is_database_busy(error):
@@ -584,6 +587,15 @@ def run_jobs(database=None, llm=None):
 
 
 
+def scheduled_lint_ready(database):
+    # Initial ingest/rebuild takes precedence over optional scheduled model review.
+    from .llm_client import model_requests_active
+    if model_requests_active():
+        return False
+    with connect(database) as db:
+        return not db.execute("SELECT 1 FROM wiki_jobs WHERE state IN ('queued','running') LIMIT 1").fetchone()
+
+
 def start_worker(database=None):
     database=Path(database or db_path()).resolve()
     stop = threading.Event()
@@ -591,6 +603,7 @@ def start_worker(database=None):
         last_policy_check = 0
         last_prompt_hash = None
         while not stop.is_set():
+            pause = 3
             try:
                 if time.monotonic()-last_policy_check >= 60:
                     fingerprint = load_prompt('compile').fingerprint
@@ -599,17 +612,19 @@ def start_worker(database=None):
                             enqueue(db, 'Wiki writing policy checked: '+fingerprint[:12]); db.commit()
                         last_prompt_hash = fingerprint
                     last_policy_check = time.monotonic()
-                run_jobs(database)
+                result = run_jobs(database)
+                pause = result.get('retry_after_seconds',3)
             except Exception:
                 # The durable outbox/lease makes interrupted jobs recoverable.
                 import logging
                 logging.getLogger(__name__).exception('Wiki maintenance failed; retrying at next check')
-            stop.wait(3)
+            stop.wait(pause)
     def lint_work():
         from .wiki_lint import run_lint
         while not stop.wait(60):
             try:
-                run_lint(database,due_only=True)
+                if scheduled_lint_ready(database):
+                    run_lint(database,due_only=True)
             except Exception:
                 import logging
                 logging.getLogger(__name__).exception('Wiki lint failed; retrying at next check')

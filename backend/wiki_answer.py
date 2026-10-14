@@ -4,7 +4,7 @@ import time
 from uuid import uuid4
 from fastapi import HTTPException
 from .wiki_store import WikiError
-from .llm_client import CompanyLLM, LLMError
+from .llm_client import CompanyLLM, LLMError, LLMTimeoutError, LLMCapacityError
 from .wiki_retrieval import retrieve, keywords
 from .wiki_policy import load_prompt
 from .answer_evidence import build_evidence
@@ -12,9 +12,9 @@ from .answer_validation import grounded_sections, render_answer, review_items, a
 from .answer_trace import save_run
 from .conversation_context import conversation_context, contextual_query
 from .research_progress import checkpoint, stage
+from .ai_settings import load_ai_settings
 
 VERSION = 'research-answer-v1'
-MAX_SECONDS = 240
 MAX_QUERIES = 6
 MAX_MODEL_CALLS = 4
 MAX_INPUT_CHARS = 100000
@@ -85,7 +85,8 @@ def answer(request, llm=None):
     conversation = conversation_context(getattr(request, 'history_run_ids', []))
     stage('context', '앞선 대화의 주제와 질문 범위를 확인했습니다.')
     start = time.monotonic()
-    deadline = start + MAX_SECONDS
+    max_seconds = load_ai_settings().limits.research_timeout_seconds
+    deadline = start + max_seconds
     store, state, catalogue = load_catalogue()
     glossary=term_snapshot(store.database)
     llm = llm or CompanyLLM()
@@ -98,9 +99,10 @@ def answer(request, llm=None):
     trace = dict(version=VERSION, searches=[], model_calls=[], prompt_hashes={},
                  terminology_revision=glossary['revision'],
                  limits=dict(max_queries=MAX_QUERIES, max_model_calls=MAX_MODEL_CALLS,
-                             evidence_chars=budget, scheduling_seconds=MAX_SECONDS))
+                             evidence_chars=budget, scheduling_seconds=max_seconds))
     notices, prompts, queries, results = [], {}, [], []
     groups, raw_groups, validation = {}, {}, 'not_generated'
+    model_available = True
 
     try:
         for operation in ('answer', 'plan', 'refine', 'review'):
@@ -113,6 +115,7 @@ def answer(request, llm=None):
         prompts = {}
 
     def call(operation, payload):
+        nonlocal model_available
         checkpoint()
         labels = {'plan':'추가로 확인할 논문과 검색 방향을 정리하고 있습니다.',
                   'refine':'찾은 근거와 빠진 조건을 검토하고 있습니다.',
@@ -130,18 +133,22 @@ def answer(request, llm=None):
             raise WikiError('분석 입력 한도에 도달했습니다. 질문 범위를 좁혀 주세요.')
         entry = dict(operation=operation, input_chars=chars, status='started',terminology=rules)
         trace['model_calls'].append(entry)
-        if isinstance(llm, CompanyLLM):
-            llm.timeout_seconds = min(90, max(1, remaining))
+        called_at = time.monotonic()
         try:
-            result = llm.complete_json(system, payload)
+            result = (llm.complete_json(system, payload, deadline=deadline) if isinstance(llm, CompanyLLM)
+                      else llm.complete_json(system, payload))
             checkpoint()
             if not isinstance(result, dict):
                 raise WikiError('모델 응답 형식을 확인해야 합니다.')
             entry['status'] = 'completed'
             return result
-        except (WikiError, LLMError):
+        except (WikiError, LLMError) as error:
             entry['status'] = 'failed'
+            if isinstance(error, (LLMTimeoutError, LLMCapacityError)):
+                model_available = False  # Do not compound provider overload with later phases.
             raise
+        finally:
+            entry['elapsed_ms'] = round((time.monotonic()-called_at)*1000)
 
     def search(query):
         checkpoint()
@@ -163,7 +170,7 @@ def answer(request, llm=None):
     search(request.question)
     if conversation:
         search(contextual_query(request.question, conversation))
-    if llm.configured and prompts:
+    if llm.configured and prompts and model_available:
         try:
             plan = call('plan', dict(question=request.question, experts=_profiles(ids, state, {})))
             trace['plan'] = dict(queries=_queries(plan.get('queries'), 3), gaps=_gaps(plan.get('gaps', [])))
@@ -178,7 +185,7 @@ def answer(request, llm=None):
                               catalogue=catalogue, budget=budget)
 
     bundle = assemble()
-    if llm.configured and prompts and bundle['evidence']:
+    if llm.configured and prompts and model_available and bundle['evidence']:
         try:
             refined = call('refine', dict(question=request.question, queries=queries,
                 experts=_profiles(ids, state, {}), evidence=bundle['evidence']))
@@ -197,7 +204,7 @@ def answer(request, llm=None):
     limitations = _limitations(evidence, state)
     # Refinement gaps predate the final retrieval and are not automatically still
     # missing. The answer must reassess them against the final evidence.
-    if llm.configured and prompts and evidence:
+    if llm.configured and prompts and model_available and evidence:
         try:
             result = call('answer', dict(question=request.question, mode=mode, experts=profiles,
                 evidence=evidence, limitations=limitations,
@@ -267,7 +274,8 @@ def answer(request, llm=None):
                  expert_hashes={eid: state['experts'][eid]['hash'] for eid in ids},
                  paper_hashes={pid: state['papers'][pid]['hash'] for pid in paper_ids},
                  wikis=bundle['wikis'], generated_sections=raw_groups,
-                 published_sections=groups, usage=getattr(llm, 'usage_history', []))
+                 published_sections=groups, usage=getattr(llm, 'usage_history', []),
+                 model_timings=getattr(llm, 'call_history', []))
     stage('verify', '근거의 최신 상태를 확인하고 답변을 정리하고 있습니다.')
     _, latest, valid = load_catalogue()
     stale = any(eid not in latest['experts'] or latest['experts'][eid]['hash'] != state['experts'][eid]['hash'] for eid in ids)

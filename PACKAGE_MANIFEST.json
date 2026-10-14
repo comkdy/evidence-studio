@@ -1,6 +1,6 @@
 {
   "app": "Evidence Studio",
-  "release": "github-sqlite-contention-2026-10-14",
+  "release": "github-slow-inference-2026-10-14",
   "database": "Absent; schema and baseline settings initialize on first launch.",
   "wiki": "Empty; documents are regenerated after ingest.",
   "raw_pdf_count": 0,
@@ -20,8 +20,8 @@
   "files": [
     {
       "path": ".env.example",
-      "bytes": 2551,
-      "sha256": "a4d1a8ac8c5d8641092dce72adc5af1aaa7b772adeb2ee43bd8c17478dd93f6f"
+      "bytes": 3183,
+      "sha256": "99a9319cd6a06d1214307f7e29fd0e735870ebe83929017949123b59065ac5fa"
     },
     {
       "path": ".gitattributes",
@@ -50,8 +50,8 @@
     },
     {
       "path": "backend/ai_settings.py",
-      "bytes": 1722,
-      "sha256": "dd4c70715df125e478d9c50f079ad377bab11b56e68b81905d6289a1dad9f928"
+      "bytes": 3075,
+      "sha256": "0b9ef7da03bd0d6985aa119a890484234d20d439ef46e87c66a6beb2626d3e36"
     },
     {
       "path": "backend/answer_evidence.py",
@@ -90,8 +90,8 @@
     },
     {
       "path": "backend/embedding_client.py",
-      "bytes": 12505,
-      "sha256": "d3ac8359d0df27046be7dc641f58ea5f5eea5db833d7c8991b687784f648ab38"
+      "bytes": 12857,
+      "sha256": "bc65d89e86da149032b578727aa8f1dbe17bcc3c09bc1c4b21bf2e5778c75930"
     },
     {
       "path": "backend/embedding_contract.example.json",
@@ -120,8 +120,8 @@
     },
     {
       "path": "backend/llm_client.py",
-      "bytes": 3866,
-      "sha256": "0e03da669acae491d3e0d4a53f15d9413c88a02aea138b9abe8c9460f83224be"
+      "bytes": 9154,
+      "sha256": "635358219d4a9cfb55e7737b453f6b0e705c78f40871f24c8266cff83157e3eb"
     },
     {
       "path": "backend/main.py",
@@ -270,8 +270,8 @@
     },
     {
       "path": "backend/wiki_answer.py",
-      "bytes": 16467,
-      "sha256": "b02cf89ec4f16d1f7c820650c5bf6b03f38cc4dd05c51ba9cc8cd89ef124fe44"
+      "bytes": 17098,
+      "sha256": "00343366ac058552b8cc8e09d08966bce4c4f9c4750113137a9f5b1f4ed95f7f"
     },
     {
       "path": "backend/wiki_api.py",
@@ -280,13 +280,13 @@
     },
     {
       "path": "backend/wiki_engine.py",
-      "bytes": 37360,
-      "sha256": "b475adb8c363c9facc9147e56449b012927541129aa7914c2faf6e3fe8f62079"
+      "bytes": 38183,
+      "sha256": "fd29283a25fba865f78e4e18143319bd727884452c277e8c789e316b036c2865"
     },
     {
       "path": "backend/wiki_lint.py",
-      "bytes": 12492,
-      "sha256": "a694585ffab977cfc60f5708c37b75b87c28f826c9732e3fac0cf68435e370ae"
+      "bytes": 12912,
+      "sha256": "fab3f72491175924e9a91866bd50c668e0d31ad24eab35c4c72c5671a8a8db7c"
     },
     {
       "path": "backend/wiki_policy.py",
@@ -295,8 +295,8 @@
     },
     {
       "path": "backend/wiki_retrieval.py",
-      "bytes": 12227,
-      "sha256": "e03525878ed6421d1f6b2f6af381443f6abec83676896be83b486bf0de67e079"
+      "bytes": 12275,
+      "sha256": "c2f65600cabbd52f65c18a5eb0427cc722754e49f198a8099c29a511fb07fcf6"
     },
     {
       "path": "backend/wiki_store.py",
@@ -340,8 +340,8 @@
     },
     {
       "path": "docs/HANDOFF.md",
-      "bytes": 13700,
-      "sha256": "fe56ee14a3b80e41313603ac072cb912e61657e5281917739a43e5340261b5f8"
+      "bytes": 20066,
+      "sha256": "567882b88c1329e59299975a27bb9af1cb088fc08fdeb4ea83879a9eea736564"
     },
     {
       "path": "docs/MARKDOWN_WIKI.md",
@@ -360,8 +360,8 @@
     },
     {
       "path": "docs/RESEARCH_QA.md",
-      "bytes": 11978,
-      "sha256": "11f3f7fc5ddaa811939984a410e25a1d5fbe620fa7b43729cb8290b966aecf9c"
+      "bytes": 12811,
+      "sha256": "91e5f270bd73ad18f6c58d98f37a5ca700eaa43d2afa892f2f7a27a97db0a6b6"
     },
     {
       "path": "docs/TERMINOLOGY.md",
@@ -714,6 +714,11 @@
       "sha256": "435a76a58d1d750a13c245999d73820893a3346d8023bc0d1480ac1751b9d8e1"
     },
     {
+      "path": "tests/test_slow_inference.py",
+      "bytes": 17582,
+      "sha256": "1eac55975fa4784885883ed8b48a16c295df55588300ae9b5cbca38c2e325451"
+    },
+    {
       "path": "tests/test_terminology.py",
       "bytes": 10200,
       "sha256": "67593a72c37a7eef6a8948568e07d8d9e388625b10c5597d4bd12eb56c51001e"
@@ -748,12 +753,13 @@
   "visibility": "private",
   "bootstrap_admin": "Read BOOTSTRAP_ADMIN_EMPLOYEE_ID from the untracked .env; local-only demo identity when unset.",
   "validation": {
-    "backend_tests": 233,
+    "backend_tests": 249,
     "frontend_tests": 16,
     "frontend_build": "unchanged from previously verified build",
     "external_model_calls": false,
     "conversation_browser_check": "isolated synthetic data and deterministic test model",
     "database_concurrency_tests": 14,
-    "test_detail": "Full backend suite: 232 passing; subsequent commit-failure regression and all 14 concurrency / 28 chunking tests passing."
+    "test_detail": "Full backend suite: 249 passing, including 16 slow-inference and 14 database-concurrency tests; frontend: 16 passing.",
+    "slow_inference_tests": 16
   }
 }

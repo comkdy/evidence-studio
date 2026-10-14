@@ -50,7 +50,7 @@ class EmbeddingConfig:
             raise EmbeddingError("Set EMBEDDING_BASE_URL to the internal service URL without credentials or query parameters")
         if not self.service.model.strip():
             raise EmbeddingError("EMBEDDING_MODEL is required for semantic chunking")
-        if not 128 <= self.max_input_tokens <= 32768 or not 1 <= self.batch_size <= 128 or not 0 < self.timeout_seconds <= 120:
+        if not 128 <= self.max_input_tokens <= 32768 or not 1 <= self.batch_size <= 128 or not 0 < self.timeout_seconds <= 1800:
             raise EmbeddingError("Invalid embedding input limit, batch size or timeout")
         if not self.auth_header or any(c in self.auth_header for c in "\r\n: ") or any(c in self.auth_scheme for c in "\r\n"):
             raise EmbeddingError("Invalid embedding authentication header configuration")
@@ -155,11 +155,14 @@ class EmbeddingClient:
                 except HTTPError as exc:
                     code = exc.code
                     exc.close()
-                    if code in (429, 502, 503, 504) and attempt < 2:
+                    if code in (429, 502, 503) and attempt < 2:
                         time.sleep(2 ** attempt)
                         continue
                     raise EmbeddingError(f"Embedding API returned HTTP {code}; the previous index is preserved") from None
-                except (URLError, TimeoutError, OSError, HTTPException):
+                except (URLError, TimeoutError, OSError, HTTPException) as error:
+                    if isinstance(error, TimeoutError) or isinstance(getattr(error, "reason", None), TimeoutError):
+                        # The provider may still be computing; do not duplicate slow requests.
+                        raise EmbeddingError("Embedding API timed out; no automatic resend; the previous index is preserved") from None
                     if attempt < 2:
                         time.sleep(2 ** attempt)
                         continue

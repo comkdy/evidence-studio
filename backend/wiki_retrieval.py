@@ -180,7 +180,7 @@ def rerank(question,items,service):
     body=dict(model=service.model,query=question,documents=[i['text'] for i in items])
     try:
         req=Request(service.base_url,data=json.dumps(body,ensure_ascii=False).encode(),headers={'Authorization':'Bearer '+service.api_key.get_secret_value(),'Content-Type':'application/json'},method='POST')
-        with build_opener(NoRedirect(),HTTPSHandler(context=ssl.create_default_context())).open(req,timeout=30) as response:
+        with build_opener(NoRedirect(),HTTPSHandler(context=ssl.create_default_context())).open(req,timeout=load_ai_settings().limits.reranker_timeout_seconds) as response:
             raw=response.read(2_000_001)
         if len(raw)>2_000_000:
             raise ValueError()
