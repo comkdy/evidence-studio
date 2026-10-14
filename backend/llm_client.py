@@ -93,7 +93,7 @@ class CompanyLLM:
         import hashlib
         return self.service.model + ':' + hashlib.sha256(self.service.base_url.encode()).hexdigest()[:16]
 
-    def complete_json(self, system, payload, *, deadline=None):
+    def complete_json(self, system, payload, *, deadline=None, max_output_tokens=None):
         """Bound local queueing and I/O waits; never automatically repeat generation."""
         checkpoint()
         started = time.monotonic()
@@ -114,7 +114,8 @@ class CompanyLLM:
                     if remaining <= 0:
                         raise LLMTimeoutError('심층 분석 시간 한도에 도달했습니다.')
                     timeout = min(timeout, remaining)
-                result = self._request_json(system, payload, timeout)
+                result = (self._request_json(system, payload, timeout, max_output_tokens=max_output_tokens)
+                          if max_output_tokens is not None else self._request_json(system, payload, timeout))
                 checkpoint()
                 if deadline is not None and time.monotonic() >= deadline:
                     raise LLMTimeoutError('심층 분석 시간 한도에 도달하여 늦게 도착한 결과를 사용하지 않았습니다.')
@@ -127,7 +128,7 @@ class CompanyLLM:
             self.call_history.append(dict(status=status, elapsed_ms=round((time.monotonic()-started)*1000),
                                           input_chars=len(system)+len(json.dumps(payload,ensure_ascii=False))))
 
-    def _request_json(self, system, payload, timeout):
+    def _request_json(self, system, payload, timeout, *, max_output_tokens=None):
         checkpoint()
         if not self.configured:
             raise LLMError('사내 LLM 주소·모델·API key를 설정해야 합니다.')
@@ -143,6 +144,10 @@ class CompanyLLM:
         body = {'model': self.service.model, 'messages': [
             {'role': 'system', 'content': system},
             {'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)}]}
+        if max_output_tokens is not None:
+            if type(max_output_tokens) is not int or max_output_tokens < 1:
+                raise LLMError('Wiki 출력 token 한도가 올바르지 않습니다.')
+            body['max_tokens'] = max_output_tokens
         try:
             req = Request(endpoint, data=json.dumps(body, ensure_ascii=False).encode(),
                           headers={'Authorization': 'Bearer '+key, 'Content-Type': 'application/json'}, method='POST')

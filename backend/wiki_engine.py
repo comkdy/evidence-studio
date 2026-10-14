@@ -15,6 +15,7 @@ from .pilot_db import connect, db_path, initialize, now, write_connection, is_da
 from .llm_client import CompanyLLM, LLMError, LLMTimeoutError, LLMCapacityError
 from .wiki_store import WikiStore, WikiError, digest, safe_path, atomic_write, parse_markdown
 from .wiki_policy import load_prompt
+from .wiki_budget import budget_for, extraction_model, page_evidence, source_batches
 
 LEASE_SECONDS = 600
 LEASE_RENEW_SECONDS = 30
@@ -209,26 +210,47 @@ def render_sections(sections, evidence, path):
     return '\n'.join(lines)
 
 
+def compile_inputs(store, llm, page_id, title, evidence, kind, previous_context, prompt):
+    from .terminology import snapshot as term_snapshot, prompt_rules, prompt_text
+    rules = prompt_rules(json.dumps([title,previous_context,evidence],ensure_ascii=False),
+                         term_snapshot(store.database)) if llm.configured and evidence else []
+    old = store.record(page_id)
+    # Raw extraction reads current originals, not its own previous summary again.
+    raw = evidence and all(e['kind']=='source_text' for e in evidence.values())
+    previous = store.read(old)[1] if old else ''
+    payload = dict(title=title, page_kind=kind, expert_overview=previous_context,
+        previous_wiki='' if raw or kind in ('source_part','topic_part') else previous, evidence=evidence,
+        coverage={'complete_paper_review': False, 'scientific_review': 'pending',
+            'instruction': '제공된 근거에서 연구 목적·핵심 발견·수치·조건·한계를 선별하세요. 모든 주장과 반례를 포함했다고 가정하지 마세요.'})
+    payload['output_budget']={'max_tokens':budget_for(llm).output_tokens,
+        'instruction':'핵심 항목을 간결하게 작성하세요. 출력 한도에 맞춰 항목 수를 줄이되, 선택한 진술의 수치·단위·적용 조건과 정확한 원문 인용은 보존하세요.'}
+    return prompt_text(prompt.text,rules), payload, rules
+
+
+def fits_compile(store, llm, page_id, title, evidence, kind, prompt, overview=''):
+    system, payload, _ = compile_inputs(store,llm,page_id,title,evidence,kind,overview,prompt)
+    return budget_for(llm).fits(system,payload)
+
+
 def compile_page(store, state, llm, page_id, path, title, evidence, refs, *,
                  expert_id=None, kind='topic', previous_context='', reason='knowledge update', prompt=None):
     prompt = prompt or load_prompt('compile')
     refs = dict(refs, policy_hash=prompt.policy_hash, prompt_hash=prompt.fingerprint)
-    from .terminology import snapshot as term_snapshot, prompt_rules, prompt_text, fingerprint
-    rules=prompt_rules(json.dumps([title,previous_context,evidence],ensure_ascii=False),term_snapshot(store.database)) if llm.configured and evidence else []
-    # Only selected vocabulary invalidates an LLM compilation. Offline evidence
-    # links retain their original signature; dictionary edits never rebuild all Wiki.
+    from .terminology import fingerprint
+    system, payload, rules = compile_inputs(store,llm,page_id,title,evidence,kind,previous_context,prompt)
     if rules:refs['terminology']=dict(fingerprint=fingerprint(rules),terms=rules)
     signature = digest([VERSION, title, refs, evidence, prompt.fingerprint, llm.identity if llm.configured else 'awaiting-llm'])
     old = store.record(page_id)
     if old and old['input_hash'] == signature and old['status'] != 'archived':
         store.read(old)
         return old
-    previous = store.read(old)[1] if old else ''
     if llm.configured and evidence:
-        sections = validate_sections(llm.complete_json(prompt_text(prompt.text,rules), dict(title=title, page_kind=kind,
-            expert_overview=previous_context, previous_wiki=previous, evidence=evidence,
-            coverage={'complete_paper_review': False, 'scientific_review': 'pending',
-                'instruction': '제공된 근거는 선별된 주장 또는 원문 구간입니다. 논문 전체의 주장·반례·한계를 모두 포함했다고 가정하지 마세요. 종합의 범위와 추가 확인할 근거를 구분하세요.'})), evidence)
+        budget = budget_for(llm)
+        if not budget.fits(system,payload):
+            raise WikiError('Wiki 요청이 모델 입력 한도를 초과합니다. LLM_CONTEXT_TOKENS/tokenizer 또는 기존 Wiki 크기를 확인하세요.')
+        result = (llm.complete_json(system,payload,max_output_tokens=budget.output_tokens)
+                  if isinstance(llm,CompanyLLM) else llm.complete_json(system,payload))
+        sections = validate_sections(result,evidence)
         body = '# ' + escaped(title) + '\n\n' + render_sections(sections, evidence, path)
         refs['source_spans'].extend(s for section in sections for item in section['statements'] for s in item['source_spans'])
         producer, status = 'company-llm:' + llm.service.model, 'ready'
@@ -276,41 +298,42 @@ def source_page(store, state, paper, llm, reason, prompt=None):
         body += '원문 문자열 대조 완료 · 내용의 타당성은 사람 검토 대상입니다.\n'
         return [store.publish(page_id, path, paper['title'], body, refs, digest([VERSION, paper['hash']]),
                               kind='source', producer='curated-db-migration', reason=reason)]
-    # Every usable page is covered, in bounded pieces. Large papers are not cut off.
-    parts = []
-    for page in paper['pages']:
-        if page['status'] != 'ready':
-            continue
-        for n, start in enumerate(range(0, len(page['text']), 10000)):
-            text = page['text'][start:start+10000]
-            eid = 'raw-' + page['id'] + '-' + str(n)
-            ev = {eid: dict(kind='source_text', paper_id=pid, page_id=page['id'], document_id=page['document_id'],
-                           page_number=page['page_number'], offset=start, text=text)}
-            part_id = 'part-' + digest(eid)[:24]
-            parts.append(compile_page(store, state, llm, part_id, f'common/sources/parts/{part_id}.md',
-                         f'{paper["title"]} · p. {page["page_number"]} · {n+1}', ev, base_refs([pid], state),
-                         kind='source_part', reason=reason, prompt=prompt))
-    if not parts:
+    prompt = prompt or load_prompt('compile')
+    # Preserve already valid pre-upgrade source trees without an expensive forced rebuild.
+    legacy = reusable_source_tree(store,state,llm,paper,prompt)
+    if legacy:
+        return legacy
+    _, evidence = page_evidence(paper)
+    if not evidence:
         return [store.publish(page_id, path, paper['title'], '# '+escaped(paper['title'])+'\n\n원문 추출·OCR 확인 후 지식을 구성합니다.\n',
                               refs, digest([VERSION, paper['hash'], 'needs-source']), kind='source', status='needs_source', reason=reason)]
-    # Tree reduction bounds each synthesis request, including long papers.
-    outputs = list(parts)
-    level = parts
-    depth = 0
-    while len(level) > 6:
-        next_level = []
-        for n in range(0, len(level), 6):
-            group = level[n:n+6]
-            mid = page_id + f'-part-index-{depth}-{n//6}'
-            row = synthesize(store, state, llm, group, mid, f'common/sources/parts/{mid}.md',
-                             paper['title'] + f' · 지식 묶음 {depth+1}-{n//6+1}', kind='source_part', reason=reason, prompt=prompt)
-            next_level.append(row); outputs.append(row)
-        level = next_level; depth += 1
-    root = synthesize(store, state, llm, level, page_id, path, paper['title'], kind='source', reason=reason, prompt=prompt)
-    return outputs + [root]
+    extractor = extraction_model(llm)
+    # Prefer a single call over making more chunks just to use the smaller model.
+    for model in dict.fromkeys((extractor,llm)):
+        if fits_compile(store,model,page_id,paper['title'],evidence,'source',prompt):
+            return [compile_page(store,state,model,page_id,path,paper['title'],evidence,refs,
+                                 kind='source',reason=reason,prompt=prompt)]
+    # A tiny light-model context may not even fit policy + citation metadata.
+    sample_key=next(iter(evidence))
+    sample={sample_key:dict(evidence[sample_key],text=evidence[sample_key]['text'][:80])}
+    if extractor is not llm and not fits_compile(store,extractor,'packing-probe',
+            paper['title']+' · 근거 묶음',sample,'source_part',prompt):
+        extractor=llm
+    # Budget the exact IDs/titles that will be sent, including all metadata.
+    def identity(ev):
+        return 'part-'+digest([paper['id'],list(ev)])[:24]
+    def fits(ev):
+        return fits_compile(store,extractor,identity(ev),paper['title']+' · 근거 묶음',ev,'source_part',prompt)
+    batches = source_batches(paper,budget_for(extractor),fits)
+    parts = [compile_page(store,state,extractor,identity(ev),f'common/sources/parts/{identity(ev)}.md',
+                         paper['title']+' · 근거 묶음',ev,base_refs([pid],state),
+                         kind='source_part',reason=reason,prompt=prompt) for ev in batches]
+    intermediates, root = reduce_sources(store,state,llm,parts,page_id,path,paper['title'],
+        kind='source',part_kind='source_part',part_dir='common/sources/parts',reason=reason,prompt=prompt)
+    return parts + intermediates + [root]
 
 
-def synthesize(store, state, llm, items, page_id, path, title, expert_id=None, kind='topic', reason='knowledge update', prompt=None, extra_refs=None):
+def synthesis_evidence(store,state,items):
     evidence = {}
     for r in items:
         _, body = store.read(r)
@@ -318,10 +341,47 @@ def synthesize(store, state, llm, items, page_id, path, title, expert_id=None, k
         facts = [c['summary'] for p in refs['paper_ids'] for c in state['papers'][p]['claims'] if c['id'] in refs['claim_ids']]
         evidence[r['id']] = dict(kind='wiki', title=r['title'], path=r['path'], text=body,
                                 paper_ids=refs['paper_ids'], claim_ids=refs['claim_ids'], facts=facts[:8])
-    # A source page can contain many claims. Split inputs at the evidence boundary
-    # through smaller source parts if needed instead of silently clipping its body.
-    if sum(len(e['text']) for e in evidence.values()) > 100000:
-        raise WikiError('Wiki 입력 문서가 너무 큽니다. 지식 문서를 더 작은 주제로 나누세요.')
+    return evidence
+
+
+def reusable_source_tree(store,state,llm,paper,prompt):
+    return reusable_synthesis(store,state,llm,store.record('source-'+paper['id']),paper['title'],prompt)
+
+
+def reusable_synthesis(store,state,llm,root,title,prompt):
+    if not root or root['status']!='ready':
+        return []
+    refs = json.loads(root['refs_json'])
+    # Reuse the entire valid dependency tree, including pre-upgrade fixed-page trees.
+    if not refs['dependencies']:
+        return []
+    catalogue = {r['id']:r for r in store.rows()}
+    if not current(root,state,catalogue):
+        return []
+    items = [catalogue[key] for key in refs['dependencies']]
+    evidence = synthesis_evidence(store,state,items)
+    from .terminology import fingerprint
+    _, _, rules = compile_inputs(store,llm,root['id'],title,evidence,root['kind'],'',prompt)
+    expected = dict(merge_refs(items,state),policy_hash=prompt.policy_hash,prompt_hash=prompt.fingerprint)
+    if 'topic_source_order' in refs:expected['topic_source_order']=refs['topic_source_order']
+    if rules:expected['terminology']=dict(fingerprint=fingerprint(rules),terms=rules)
+    signature=digest([VERSION,title,expected,evidence,prompt.fingerprint,llm.identity if llm.configured else 'awaiting-llm'])
+    if root['input_hash']!=signature:
+        return []
+    active={}
+    def visit(row):
+        if row['id'] in active:
+            return
+        store.read(row)
+        active[row['id']]=row
+        for key in json.loads(row['refs_json'])['dependencies']:
+            visit(catalogue[key])
+    visit(root)
+    return [r for key,r in active.items() if key!=root['id']]+[root]
+
+
+def synthesize(store, state, llm, items, page_id, path, title, expert_id=None, kind='topic', reason='knowledge update', prompt=None, extra_refs=None):
+    evidence = synthesis_evidence(store,state,items)
     refs = merge_refs(items, state, expert_id)
     if extra_refs:
         refs.update(extra_refs)
@@ -336,8 +396,7 @@ def common_topic(store, state, llm, sources, tag, reason, prompt, heartbeat=lamb
     """One stable topic root covers every source, with bounded intermediate inputs.
 
     Existing source order is retained; new sources append to it. Full groups keep
-    their identity as the corpus grows, including the transition from six to seven
-    papers. Intermediate groups are processing units, not scientific subtopics.
+    their identity as the corpus grows when their inputs and budgets are unchanged. Intermediate groups are processing units, not scientific subtopics.
     The old small-topic root ID stays valid, preserving edits and revision history.
     """
     key=digest(tag)[:12]
@@ -349,22 +408,54 @@ def common_topic(store, state, llm, sources, tag, reason, prompt, heartbeat=lamb
     order=list(dict.fromkeys(i for i in previous_order if i in by_id))
     order.extend(sorted(set(by_id)-set(order)))
     level=[by_id[i] for i in order]
-    parts=[]; depth=0
-    while len(level)>6:
+    if old and set(old_refs['paper_ids']) == {p for r in sources for p in json.loads(r['refs_json'])['paper_ids']}:
+        cached=reusable_synthesis(store,state,llm,old,tag,prompt)
+        if cached:
+            return [r for r in cached[:-1] if r['kind']=='topic_part'],cached[-1]
+    return reduce_sources(store,state,llm,level,root_id,f'common/topics/{key}-0-0.md',tag,
+        kind='topic',part_kind='topic_part',part_dir='common/topics/parts',reason=reason,prompt=prompt,
+        heartbeat=heartbeat,extra_refs={'topic_source_order':order})
+
+
+def reduce_sources(store,state,llm,items,page_id,path,title,*,kind,part_kind,part_dir,reason,prompt,
+                   heartbeat=lambda:None,extra_refs=None,max_levels=8):
+    """Only introduce intermediate summaries when the full request cannot fit."""
+    level=list(items); parts=[]
+    for depth in range(max_levels):
+        heartbeat()
+        evidence=synthesis_evidence(store,state,level)
+        if fits_compile(store,llm,page_id,title,evidence,kind,prompt):
+            root=synthesize(store,state,llm,level,page_id,path,title,kind=kind,reason=reason,
+                            prompt=prompt,extra_refs=extra_refs)
+            return parts,root
+        groups=[]; group=[]
+        def group_info(rows):
+            key=page_id+'-group-'+digest([depth,[r['id'] for r in rows]])[:20]
+            return key,title+' · 종합 근거'
+        def fits(rows):
+            key,label=group_info(rows)
+            return fits_compile(store,llm,key,label,synthesis_evidence(store,state,rows),part_kind,prompt)
+        for row in level:
+            if group and not fits(group+[row]):
+                groups.append(group);group=[]
+            if not fits([row]):
+                raise WikiError('단일 Wiki 근거가 모델 입력 한도를 초과합니다. 모델 context/tokenizer 또는 WIKI_OUTPUT_TOKENS를 조정하세요. 원문을 생략하지 않았습니다.')
+            group.append(row)
+        if group:groups.append(group)
+        if len(groups)>=len(level):
+            raise WikiError('Wiki 근거를 손실 없이 종합할 입력 여유가 없습니다. 모델 context/tokenizer 설정을 확인하세요.')
         next_level=[]
-        for offset in range(0,len(level),6):
+        for rows in groups:
+            if len(rows)==1:
+                next_level.extend(rows)  # no pointless one-document intermediate call
+                continue
             heartbeat()
-            group=level[offset:offset+6]
-            part_key=key+'-part-'+str(depth)+'-'+digest([r['id'] for r in group])[:16]
-            part=synthesize(store,state,llm,group,'common-'+part_key,
-                f'common/topics/parts/{part_key}.md',tag+' · 종합을 위한 근거 묶음',
-                kind='topic_part',reason=reason,prompt=prompt)
-            parts.append(part); next_level.append(part)
-        level=next_level; depth+=1
-    heartbeat()
-    root=synthesize(store,state,llm,level,root_id,f'common/topics/{key}-0-0.md',tag,
-        reason=reason,prompt=prompt,extra_refs={'topic_source_order':order} if parts else None)
-    return parts,root
+            key,label=group_info(rows)
+            part=synthesize(store,state,llm,rows,key,f'{part_dir}/{key}.md',label,
+                            kind=part_kind,reason=reason,prompt=prompt)
+            parts.append(part);next_level.append(part)
+        level=next_level
+    raise WikiError('Wiki 종합 단계 한도에 도달했습니다. 입력 한도 또는 주제 범위를 확인하세요.')
 
 
 def reconcile(database=None, llm=None, reason='knowledge update', heartbeat=lambda: None, *, scope='all', expert_id=''):

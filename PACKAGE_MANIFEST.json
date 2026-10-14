@@ -1,6 +1,6 @@
 {
   "app": "Evidence Studio",
-  "release": "github-slow-inference-2026-10-14",
+  "release": "github-adaptive-wiki-2026-10-14",
   "database": "Absent; schema and baseline settings initialize on first launch.",
   "wiki": "Empty; documents are regenerated after ingest.",
   "raw_pdf_count": 0,
@@ -20,8 +20,8 @@
   "files": [
     {
       "path": ".env.example",
-      "bytes": 3183,
-      "sha256": "99a9319cd6a06d1214307f7e29fd0e735870ebe83929017949123b59065ac5fa"
+      "bytes": 4075,
+      "sha256": "1f6a4646a0acd03a2b804d6bd003b8c9b5e46099355a946d57dbf37065385bc2"
     },
     {
       "path": ".gitattributes",
@@ -50,8 +50,8 @@
     },
     {
       "path": "backend/ai_settings.py",
-      "bytes": 3075,
-      "sha256": "0b9ef7da03bd0d6985aa119a890484234d20d439ef46e87c66a6beb2626d3e36"
+      "bytes": 4693,
+      "sha256": "9edbcfd8caf7b1f959ee0547650bf64984844673efc0531e95a7066fb7b7ff1b"
     },
     {
       "path": "backend/answer_evidence.py",
@@ -120,8 +120,8 @@
     },
     {
       "path": "backend/llm_client.py",
-      "bytes": 9154,
-      "sha256": "635358219d4a9cfb55e7737b453f6b0e705c78f40871f24c8266cff83157e3eb"
+      "bytes": 9611,
+      "sha256": "2153c60d0dab1951fe4b257479eea10a781ec70508b15d76d8c46be17ee09c37"
     },
     {
       "path": "backend/main.py",
@@ -279,9 +279,14 @@
       "sha256": "2d4190e37336a57a941c50d735bd1b90e653745ac61e3a98628a5d1ae5fe315a"
     },
     {
+      "path": "backend/wiki_budget.py",
+      "bytes": 5418,
+      "sha256": "d53b530dcbcd814b45a6e0afd1e611cb05d7fc119862f3330905b51a87ac5e41"
+    },
+    {
       "path": "backend/wiki_engine.py",
-      "bytes": 38183,
-      "sha256": "fd29283a25fba865f78e4e18143319bd727884452c277e8c789e316b036c2865"
+      "bytes": 43225,
+      "sha256": "9ce50a5bca0685539de7fe786bb5106675d911c0a9adf1b2f10d737bed4ea119"
     },
     {
       "path": "backend/wiki_lint.py",
@@ -340,13 +345,13 @@
     },
     {
       "path": "docs/HANDOFF.md",
-      "bytes": 20066,
-      "sha256": "567882b88c1329e59299975a27bb9af1cb088fc08fdeb4ea83879a9eea736564"
+      "bytes": 26263,
+      "sha256": "4560653d52f3f2641de027246c0da966669c9386f654cf100d887e3a059c38ee"
     },
     {
       "path": "docs/MARKDOWN_WIKI.md",
-      "bytes": 23966,
-      "sha256": "7b4d267c717ecf8494d253588d4d84c480fa0a945838bc48012213a325a16cb4"
+      "bytes": 25168,
+      "sha256": "ea6084845af8cb27537877f392551b89f56f1af67d24f60ae82e304f041d5b50"
     },
     {
       "path": "docs/REPORT_AI_REFERENCE.md",
@@ -700,8 +705,8 @@
     },
     {
       "path": "tests/test_research_retrieval.py",
-      "bytes": 9128,
-      "sha256": "77ab3e050948e45b3c22d6e357f5b0fda4e12d579aa4e6a23aa33f91430b4f5e"
+      "bytes": 9277,
+      "sha256": "20bca59680a46f483b63d69557245b8613566719bb90a3d5b76735c11d908238"
     },
     {
       "path": "tests/test_scientific_values.py",
@@ -729,6 +734,11 @@
       "sha256": "a0a61b84dc2105bf4b88206b8da29fe518e523876e3d4fc5317b318c7676ea71"
     },
     {
+      "path": "tests/test_wiki_packing.py",
+      "bytes": 15137,
+      "sha256": "4109f6e69afc01158bb4c9548439dd9232aa42866f044c7da327aef0a5e1e774"
+    },
+    {
       "path": "tests/workspace-state.test.mjs",
       "bytes": 1367,
       "sha256": "ff3db2e408494a8518902cf9f27e7080c7d501edd35893c2b40f69a66adea934"
@@ -753,13 +763,14 @@
   "visibility": "private",
   "bootstrap_admin": "Read BOOTSTRAP_ADMIN_EMPLOYEE_ID from the untracked .env; local-only demo identity when unset.",
   "validation": {
-    "backend_tests": 249,
+    "backend_tests": 268,
     "frontend_tests": 16,
     "frontend_build": "unchanged from previously verified build",
     "external_model_calls": false,
     "conversation_browser_check": "isolated synthetic data and deterministic test model",
     "database_concurrency_tests": 14,
-    "test_detail": "Full backend suite: 249 passing, including 16 slow-inference and 14 database-concurrency tests; frontend: 16 passing.",
-    "slow_inference_tests": 16
+    "test_detail": "Full backend suite: 268 passing, including 19 adaptive Wiki tests; frontend: 16 passing. Synthetic short-paper source compilation uses 1 call instead of the previous 13.",
+    "slow_inference_tests": 16,
+    "adaptive_wiki_tests": 19
   }
 }

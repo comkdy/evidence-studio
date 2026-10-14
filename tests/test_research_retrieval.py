@@ -74,12 +74,12 @@ class TopicCoverageTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def sources(self,ids):
+    def sources(self,ids,repeat=1):
         rows=[]
         for pid in ids:
             self.state['papers'][pid]={'id':pid,'hash':digest(pid),'claims':[]}
             rows.append(self.store.publish('source-'+pid,'common/sources/'+pid+'.md',pid,
-                '# '+pid+'\n\nSelected evidence.',base_refs([pid],self.state),digest(pid),kind='source'))
+                '# '+pid+'\n\n'+'Selected evidence under measured conditions. '*repeat,base_refs([pid],self.state),digest(pid),kind='source'))
         return rows
 
     def compile(self,rows):
@@ -98,30 +98,31 @@ class TopicCoverageTests(unittest.TestCase):
         parts,grown=self.compile(sources+self.sources(['p6']))
         self.assertEqual(root['id'],grown['id'])
         self.assertEqual(len(json.loads(grown['refs_json'])['paper_ids']),7)
-        self.assertEqual(len(parts),2)
+        self.assertEqual(len(parts),0)  # compact sources fit in one synthesis
         self.assertIn('Reviewed synthesis',self.llm.calls[-1]['previous_wiki'])
         with connect(self.db) as db:
             self.assertGreaterEqual(db.execute('SELECT count(*) FROM wiki_revisions WHERE page_id=?',(root['id'],)).fetchone()[0],3)
 
-    def test_all_sources_reach_root_and_each_synthesis_has_bounded_fanout(self):
+    def test_all_sources_reach_root_and_each_synthesis_fits_context(self):
         sources=self.sources(['p'+str(n).zfill(3) for n in range(37)])
         parts,root=self.compile(sources)
         self.assertEqual(len(json.loads(root['refs_json'])['paper_ids']),37)
-        self.assertTrue(all(len(call['evidence'])<=6 for call in self.llm.calls))
+        self.assertTrue(all(self.llm._wiki_budget.fits(system,call) for system,call in zip(self.llm.systems,self.llm.calls)))
         self.assertTrue(all(part['kind']=='topic_part' for part in parts))
         self.assertEqual(len(json.loads(root['refs_json'])['topic_source_order']),37)
 
     def test_appending_lexically_earlier_paper_keeps_full_groups_unchanged(self):
-        sources=self.sources(['p'+str(n).zfill(3) for n in range(13)])
+        sources=self.sources(['p'+str(n).zfill(3) for n in range(13)],repeat=50)
         parts,root=self.compile(sources)
-        full={row['id']:row['content_hash'] for row in parts if len(json.loads(row['refs_json'])['paper_ids'])==6}
+        self.assertGreaterEqual(len(parts),2)
+        full={row['id']:row['content_hash'] for row in parts[:-1]}
         self.llm.calls.clear()
-        more,grown=self.compile(self.sources(['a-new'])+list(reversed(sources)))
+        more,grown=self.compile(self.sources(['a-new'],repeat=50)+list(reversed(sources)))
         current={row['id']:row['content_hash'] for row in more}
         self.assertTrue(all(current.get(key)==value for key,value in full.items()))
         self.assertEqual(root['id'],grown['id'])
         self.assertEqual(json.loads(grown['refs_json'])['topic_source_order'][-1],'source-a-new')
-        self.assertEqual(len(self.llm.calls),2)  # changed final group plus root
+        self.assertLessEqual(len(self.llm.calls),2)  # only changed tail group and root
 
     def test_legacy_extra_topic_is_archived_without_removing_its_file(self):
         # Reconciliation is exercised with isolated state and no real corpus/model.

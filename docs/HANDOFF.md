@@ -172,8 +172,8 @@ RESEARCH_TIMEOUT_SECONDS=1500
 |---|---|
 | 앱을 300초로 바꿔도 정확히 60/90초쯤 HTTP 504 | LLM 서버·사내 API gateway·reverse proxy의 별도 timeout을 확인해야 합니다. 앱 설정이 상위 서비스의 제한을 늘리지는 않습니다. |
 | 서버 중지/브라우저 답변 중지 후에도 모델이 일함 | 대기열에서는 바로 취소하지만 이미 전송한 HTTP 요청은 반환/timeout까지 계속될 수 있습니다. 제공자 연산까지 취소하려면 사내 API의 취소 지원이 필요합니다. 해당 호출의 slot을 먼저 반환하지 않도록 했습니다. |
-| Wiki job 전체가 수십 분 이상 걸림 | 300초는 Wiki job 전체 제한이 아닙니다. 원문 구간 분석과 여러 단계의 종합 각각에 모델 호출이 필요합니다. 현재 원문은 페이지당 최대 10,000자씩, 종합은 최대 6개 문서씩 묶습니다. 입력 변경이 없는 부분 결과는 재사용합니다. |
-| 긴 논문/큰 주제에서만 timeout 또는 context 초과 | 현재의 문자 수 한도는 사내 모델의 token/context 한도와 같지 않습니다. 모델별 입력 한도와 출력 길이를 확인하고, 실제 측정에 따라 Wiki 입력 묶음 크기 조정이 필요할 수 있습니다. 이번 수정에서 원문을 자르거나 검토 단계를 없애지는 않았습니다. |
+| Wiki job 전체가 수십 분 이상 걸림 | 300초는 Wiki job 전체 제한이 아닙니다. 원문 구간 분석과 여러 단계의 종합 각각에 모델 호출이 필요합니다. 짧은 논문은 원천 Wiki를 한 번에 만들고, 긴 논문·큰 주제만 모델 입력 한도에 맞춰 나눕니다(아래 9절). 입력 변경이 없는 부분 결과는 재사용합니다. |
+| 긴 논문/큰 주제에서만 timeout 또는 context 초과 | LLM_CONTEXT_TOKENS와 선택한 모델의 tokenizer를 확인하세요. tokenizer 미설정 시 UTF-8 byte 기준의 보수적 추정이며 실측 token이 아닙니다. 기존 Wiki 하나가 입력 한도보다 크면 조용히 자르지 않고 오류를 남깁니다. |
 | 응답은 왔으나 JSON·근거 검증 실패 | 속도와 별개의 출력 품질/형식 문제입니다. Chat Completions 응답 구조, JSON 작성 능력, finish_reason, 원문 인용을 확인하세요. 검증 기준을 낮춰 통과시키지 않습니다. |
 
 urllib의 timeout은 각 blocking operation에 적용되며 요청 전체에 대한 강제 종료 시계가 아닙니다. 질문 예산 초과 후 도착한 LLM 결과는 버리지만, 이미 진행 중인 I/O가 즉시 종료되는 것은 아닙니다. [Python urllib 문서](https://docs.python.org/3.12/library/urllib.request.html#urllib.request.urlopen)
@@ -181,3 +181,52 @@ urllib의 timeout은 각 blocking operation에 적용되며 요청 전체에 대
 앱의 ask-stream은 heartbeat와 X-Accel-Buffering: no를 보냅니다. 앞단 프록시가 buffering을 강제하거나 다른 idle timeout을 적용하면 별도 조정이 필요합니다. nginx의 proxy_read_timeout도 전체 응답 시간이 아니라 읽기 사이 대기 제한입니다. 사내 LLM 게이트웨이 설정은 이 저장소에서 변경할 수 없습니다. [nginx proxy 문서](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_read_timeout)
 
 검증은 로컬 지연 HTTP 서버와 가상 시간·모델을 사용했습니다. 사내 API 키/논문을 외부로 전송하지 않았습니다. 사내에서는 소량의 논문으로 호출별 실제 시간, timeout/HTTP 상태, 대기열 길이를 관찰해 조정하세요. 질문별 실행 기록의 trace.model_calls와 trace.model_timings에 소요 시간이 저장됩니다. 기존 Wiki 실패는 설정 적용 후 해당 범위 갱신을 다시 요청하며, DB·Wiki 삭제나 전체 재구축은 필요하지 않습니다.
+
+## 9. 논문 길이에 따른 Wiki 구성과 경량 모델
+
+짧다는 기준은 페이지 수가 아니라 **작성 지침 + 원문 + 근거 metadata + 필요한 이전 Wiki + 출력 여유가 선택한 모델의 context에 들어가는지**입니다.
+
+- 원천 claim·수치·조건이 이미 있으면 기존 DB 재사용 경로를 유지합니다.
+- 원문 전체가 들어가면 여러 페이지를 한 요청에 넣고 곧바로 논문 원천 Wiki를 작성합니다. 별도의 페이지별 Wiki나 논문 요약 재종합 호출은 없습니다. 공통 주제 종합 호출은 별도입니다.
+- 전체가 들어가지 않으면 문단·문장 경계를 우선하는 구조 기반 분할로 인접 페이지의 내용을 묶습니다. 한 문장 자체가 한도보다 크면 더 작은 단위로 나눕니다. 모든 ready 페이지의 원문은 빠짐없이 입력에 포함하며, 페이지 ID·document ID·원문 offset을 별도로 보존합니다. 검색용 embedding 기반 semantic chunking은 그대로 유지하고 Wiki 분할을 위해 embedding을 재호출하지 않습니다.
+- 조각 분석 결과가 한 번에 들어가면 바로 논문 Wiki로 종합합니다. 공통 주제도 같은 방식으로 처리합니다. 고정 6개 규칙을 없애고 실제 요청 크기가 넘을 때만 중간 종합을 추가합니다. 단일 문서를 그대로 재요약하는 중간 호출은 생략합니다.
+- 원문 분석과 내부 중간 종합은 자신의 이전 요약을 반복해서 보내지 않습니다. 최종 주제·논문 종합에는 기존 Wiki를 포함해 편집 내용을 반영합니다. 직접 수정한 미승인 Markdown의 덮어쓰기 차단은 유지합니다.
+- 원문 인용은 응답 검증 시 해당 페이지의 원래 문자열·offset과 대조합니다. 전달하지 않은 evidence ID, 틀린 인용, 잘린 JSON은 발행하지 않습니다. 모든 원문이 입력에 포함되었다는 것과 모든 과학적 주장을 추출·검증했다는 것은 다릅니다.
+- 변경 없는 기존 Wiki와 완료된 중간 문서는 재사용합니다. 이전 버전의 유효한 페이지별 Wiki tree도 새 코드 적용만으로 강제 재구축하지 않습니다. 새 논문이나 실제 근거·지침 변경부터 필요한 범위에 새 구성을 적용합니다. DB migration이나 검색 재색인은 필요하지 않습니다.
+
+### 모델 역할과 설정
+
+| 작업 | 모델 |
+|---|---|
+| 짧은 논문 원문 → 원천 Wiki, 긴 논문 원문 묶음 → 사실·인용 | LLM_LIGHT_MODEL 설정 시 경량 모델, 없으면 기본 모델 |
+| 전체 논문이 기본 모델에는 들어가지만 경량 모델에는 안 들어감 | 분할 대신 기본 모델 1회 |
+| 경량 모델이 지침·최소 근거도 수용하지 못함 | 전송 전에 기본 모델로 분할 계획 |
+| 여러 원천 지식 종합·공통 주제·전문가 특화 노트 | LLM_MODEL |
+| 질문 계획·답변·검증, 내용 lint | LLM_MODEL 유지 |
+| 목차·파일·링크·구조 검사 | 코드 실행, LLM 호출 없음 |
+
+경량 모델의 과학적 정확도를 자동으로 보증하지 않습니다. 관리자가 비교 검증한 모델을 선택적으로 지정하는 방식입니다. 인용 검증은 원문 연결을 확인하며, 조건 해석의 타당성까지 보증하지 않습니다. 경량 모델의 timeout/잘못된 응답 뒤 기본 모델로 자동 재호출하지 않습니다. 기존 Wiki를 보존하고 문제를 표시합니다.
+
+기존 .env를 덮어쓰지 말고 필요한 항목만 추가하세요.
+
+~~~dotenv
+# 기본 모델의 실제 입력+출력 context 규격
+LLM_CONTEXT_TOKENS=16384
+LLM_TOKENIZER_PATH=
+WIKI_OUTPUT_TOKENS=2048
+
+# 경량 모델을 사용하지 않으려면 비워 둡니다.
+LLM_LIGHT_MODEL=
+LLM_LIGHT_CONTEXT_TOKENS=16384
+LLM_LIGHT_TOKENIZER_PATH=
+LLM_LIGHT_BASE_URL=
+LLM_LIGHT_API_KEY=
+~~~
+
+같은 서비스의 다른 모델이면 LLM_LIGHT_MODEL만 지정하고 실제 context 한도를 맞추면 됩니다. 경량 모델 주소가 비어 있으면 기본 주소·키를 재사용합니다. 별도 주소를 지정하면 LLM_LIGHT_API_KEY도 직접 입력해야 하며, 기본 키를 다른 주소에 자동 전송하지 않습니다. 두 모델은 기존 LLM_TIMEOUT_SECONDS와 동시 호출 제한을 공유합니다.
+
+context는 모델별 4,096~1,048,576, Wiki 출력은 256~16,384 token 설정을 허용하며 기본값은 각각 16,384 / 2,048입니다. 기본값이 사내 모델의 실제 규격이라는 뜻은 아닙니다. 출력과 512 token의 chat template 여유를 뺀 입력 예산으로 전체 직렬화 요청을 검사합니다. 지침 자체가 너무 크면 전송 전에 실패합니다. 모델이 max_tokens를 지원해야 하며 Wiki 요청에 WIKI_OUTPUT_TOKENS를 전달합니다. finish_reason=length 등 불완전한 출력은 기존처럼 거부합니다.
+
+LLM_TOKENIZER_PATH와 LLM_LIGHT_TOKENIZER_PATH에는 해당 모델의 로컬 Hugging Face tokenizer.json을 선택적으로 지정합니다. 자동 다운로드나 외부 서비스 호출은 없으며 truncation/padding을 비활성화해 입력을 작게 세지 않도록 합니다. embedding용 CHUNK_TOKENIZER_PATH와 별개입니다. 경로를 비워두면 UTF-8 byte 수를 보수적인 token 추정치로 사용해 한국어·수식도 여유 있게 계산합니다. 이 추정은 실제 사내 tokenizer/chat template와 정확히 일치하지 않으며 작은 모델에서 더 많은 조각을 만들 수 있습니다. 정확한 파일과 API usage를 확보해 조정하세요. 분할은 [semantic-text-splitter의 문단·문장 경계](https://semantic-text-splitter.readthedocs.io/en/stable/semantic_text_splitter.html#textsplitter)를 사용합니다.
+
+검증은 임시 DB와 결정적 가상 모델로 수행했습니다. 10쪽의 짧은 합성 논문은 기존 원천 경로 13회 대신 1회 호출로 처리했으며, 긴 합성 논문의 모든 원문 문자와 페이지별 인용 위치가 보존되는지 검사합니다. 실제 논문 token 절감률이나 경량 모델의 정확도를 측정한 결과는 아닙니다. Wiki job별 누적 사용량 대시보드는 이번 변경에 포함하지 않았습니다.
