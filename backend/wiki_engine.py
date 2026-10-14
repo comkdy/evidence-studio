@@ -584,6 +584,8 @@ def run_jobs(database=None, llm=None):
     stop_renewal = threading.Event()
     lease_lost = threading.Event()
     acquired = False
+    active_trace = None
+    from .wiki_usage import WikiJobTrace, recover_runs
     busy_message = 'DB가 사용 중입니다. 잠시 후 Wiki 작업을 자동 재시도합니다.'
 
     def check_owner(db):
@@ -598,6 +600,7 @@ def run_jobs(database=None, llm=None):
         with write_connection(database) as db:
             check_owner(db)
             db.execute('UPDATE wiki_worker_lease SET expires_at=? WHERE id=1 AND owner=?', (time.time()+LEASE_SECONDS,owner))
+            db.execute("UPDATE wiki_job_runs SET heartbeat_at=? WHERE owner=? AND state='running'",(now(),owner))
 
     def keep_lease():
         # Also renew during a long model request, not only between documents.
@@ -626,6 +629,7 @@ def run_jobs(database=None, llm=None):
             if lease and lease['expires_at'] > time.time():
                 return {'status':'busy'}
             db.execute('INSERT OR REPLACE INTO wiki_worker_lease VALUES(1,?,?)', (owner,time.time()+LEASE_SECONDS))
+            recover_runs(db)
             db.execute("UPDATE wiki_jobs SET state='queued' WHERE state='running'")
             jobs = [dict(r) for r in db.execute("SELECT id,reason,scope,expert_id FROM wiki_jobs WHERE state='queued' ORDER BY id")]
         acquired = True
@@ -636,12 +640,16 @@ def run_jobs(database=None, llm=None):
             with write_connection(database) as db:
                 check_owner(db)
                 db.execute("UPDATE wiki_jobs SET state='running',error='',finished_at=NULL WHERE id=?", (job['id'],))
+                active_trace=WikiJobTrace(database,db,job['id'],owner)
             try:
-                result = reconcile(database, llm, job['reason'], renew, scope=job['scope'], expert_id=job['expert_id'])
+                with active_trace.capture():
+                    result = reconcile(database, llm, job['reason'], renew, scope=job['scope'], expert_id=job['expert_id'])
                 renew()
                 with write_connection(database) as db:
                     check_owner(db)
                     db.execute("UPDATE wiki_jobs SET state='done',finished_at=?,error='' WHERE id=?", (now(),job['id']))
+                    active_trace.finish(db,'done')
+                active_trace=None
             except (WikiError, LLMError, OSError, ValueError) as error:
                 if lease_lost.is_set():
                     return {'status':'deferred','error':'Wiki 작업을 다른 워커가 이어서 처리합니다.'}
@@ -649,6 +657,8 @@ def run_jobs(database=None, llm=None):
                 with write_connection(database) as db:
                     check_owner(db)
                     db.execute("UPDATE wiki_jobs SET state='failed',finished_at=?,error=? WHERE id=?", (now(),message,job['id']))
+                    active_trace.finish(db,'failed')
+                active_trace=None
                 errors.append(message)
                 if isinstance(error, (LLMTimeoutError, LLMCapacityError)):
                     # Other scopes stay queued. Give the slow/shared service a cooldown.
@@ -668,6 +678,7 @@ def run_jobs(database=None, llm=None):
                 with write_connection(database) as db:
                     lease = db.execute('SELECT owner FROM wiki_worker_lease WHERE id=1').fetchone()
                     if lease and lease['owner'] == owner:
+                        if active_trace:active_trace.finish(db,'interrupted')
                         db.execute("UPDATE wiki_jobs SET state='queued',finished_at=NULL,error=? WHERE state='running'", (busy_message,))
                         db.execute('DELETE FROM wiki_worker_lease WHERE owner=?', (owner,))
             except sqlite3.OperationalError as error:

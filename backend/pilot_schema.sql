@@ -222,6 +222,21 @@ CREATE TABLE IF NOT EXISTS wiki_jobs (
 CREATE TABLE IF NOT EXISTS wiki_worker_lease (
  id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, expires_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS wiki_job_runs (
+ id TEXT PRIMARY KEY, job_id INTEGER NOT NULL REFERENCES wiki_jobs(id),
+ owner TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('running','done','failed','interrupted')),
+ started_at TEXT NOT NULL, heartbeat_at TEXT NOT NULL, finished_at TEXT,
+ elapsed_ms INTEGER NOT NULL DEFAULT 0 CHECK(elapsed_ms>=0)
+);
+CREATE INDEX IF NOT EXISTS idx_wiki_job_runs_job ON wiki_job_runs(job_id);
+CREATE TABLE IF NOT EXISTS wiki_model_calls (
+ id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES wiki_job_runs(id),
+ model_key TEXT NOT NULL, model TEXT NOT NULL, role TEXT NOT NULL, phase TEXT NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('waiting','running','completed','failed','interrupted')),
+ created_at TEXT NOT NULL, sent_at TEXT, finished_at TEXT, elapsed_ms INTEGER NOT NULL DEFAULT 0,
+ input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_wiki_model_calls_run ON wiki_model_calls(run_id);
 CREATE TABLE IF NOT EXISTS wiki_lint_runs (
  id TEXT PRIMARY KEY, created_at TEXT NOT NULL, finished_at TEXT,
  state TEXT NOT NULL, model TEXT NOT NULL, fingerprint TEXT NOT NULL,

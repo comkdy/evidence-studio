@@ -162,6 +162,13 @@ def processing_status(database=None):
         experts={r['id']:r['name'] for r in db.execute('SELECT id,name FROM expert_categories')}
         membership={eid:{r[0] for r in db.execute('SELECT paper_id FROM expert_papers WHERE expert_id=?',(eid,))} for eid in experts}
         waiting=[dict(r) for r in db.execute("SELECT expert_id,refs_json FROM wiki_files WHERE status='awaiting_llm'")]
+        # Unique Wiki jobs: one automatic job may belong to several paper cards.
+        visible_jobs=sorted(jobs.values(),key=lambda j:(0 if j['state']=='running' else 1 if j['state']=='queued' else 2,-j['id']))[:12]
+        from .wiki_usage import job_usages
+        usage=job_usages(db,[j['id'] for j in visible_jobs])
+        wiki_activity=[dict(id=j['id'],scope=j['scope'],state=j['state'],
+            label=experts.get(j['expert_id'],'전문가')+' Wiki 갱신' if j['scope']=='expert' else '공통 Wiki 갱신' if j['scope']=='common' else '지식 자동 반영',
+            created_at=j['created_at'],finished_at=j['finished_at'],usage=usage[j['id']]) for j in visible_jobs]
         review_count=db.execute("SELECT count(*) FROM pages p JOIN paper_documents d ON d.current_run_id=p.run_id WHERE p.status NOT IN ('ready','excluded')").fetchone()[0]
     waiting_papers={pid for r in waiting if not r['expert_id'] for pid in json.loads(r['refs_json']).get('paper_ids',[])}
     waiting_experts={r['expert_id'] for r in waiting if r['expert_id']}
@@ -210,6 +217,7 @@ def processing_status(database=None):
     active.sort(key=lambda e:{'running':0,'failed':1,'queued':2,'review':3,'waiting':4}[e['state']])
     recent=active[:8]+[e for e in entries if not e['superseded'] and e not in active][:max(0,12-len(active[:8]))]
     return {'watcher':watcher,'counts':counts,'review_pages':review_count,'tasks':recent,'total_tasks':len(entries),
+            'wiki_jobs':wiki_activity,
             'revision':max((e['updated_at'] for e in entries),default='')}
 
 

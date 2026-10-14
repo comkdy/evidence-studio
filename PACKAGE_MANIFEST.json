@@ -1,6 +1,6 @@
 {
   "app": "Evidence Studio",
-  "release": "github-adaptive-wiki-2026-10-14",
+  "release": "github-wiki-job-usage-2026-10-14",
   "database": "Absent; schema and baseline settings initialize on first launch.",
   "wiki": "Empty; documents are regenerated after ingest.",
   "raw_pdf_count": 0,
@@ -120,8 +120,8 @@
     },
     {
       "path": "backend/llm_client.py",
-      "bytes": 9611,
-      "sha256": "2153c60d0dab1951fe4b257479eea10a781ec70508b15d76d8c46be17ee09c37"
+      "bytes": 9986,
+      "sha256": "7c45063ddd6927ea0a5b4dcf5a70148c7518a97d48fd215c6667cec907a40a84"
     },
     {
       "path": "backend/main.py",
@@ -155,13 +155,13 @@
     },
     {
       "path": "backend/pilot_schema.sql",
-      "bytes": 15754,
-      "sha256": "8097dd8c5f5d23e373a7e368b8627d01b4aff78e1651b5b575a8e3db778b4273"
+      "bytes": 16732,
+      "sha256": "2109812d2fc76b7ca2dfffac394694368d647db91cc3b20b223fb4ba9b0f0563"
     },
     {
       "path": "backend/processing.py",
-      "bytes": 13392,
-      "sha256": "e29dad078b074a8fa0e66521cd84f692064288c2cb2467fc5af12adfc3841219"
+      "bytes": 14116,
+      "sha256": "95eb32f13f72cb755977a5ef6eaeab85153792a2b4d4f70821d199a6511e37f3"
     },
     {
       "path": "backend/prompts/abstract_summary_ko.txt",
@@ -275,18 +275,18 @@
     },
     {
       "path": "backend/wiki_api.py",
-      "bytes": 14025,
-      "sha256": "2d4190e37336a57a941c50d735bd1b90e653745ac61e3a98628a5d1ae5fe315a"
+      "bytes": 14132,
+      "sha256": "606b241a5f3505bd56216ca0b9b779773fe512a869d0b25ab123cd5f0c36560f"
     },
     {
       "path": "backend/wiki_budget.py",
-      "bytes": 5418,
-      "sha256": "d53b530dcbcd814b45a6e0afd1e611cb05d7fc119862f3330905b51a87ac5e41"
+      "bytes": 5477,
+      "sha256": "2abdb8111db687468a8234d9a431157734cb751c533c6e82085aaafa324d4790"
     },
     {
       "path": "backend/wiki_engine.py",
-      "bytes": 43225,
-      "sha256": "9ce50a5bca0685539de7fe786bb5106675d911c0a9adf1b2f10d737bed4ea119"
+      "bytes": 43828,
+      "sha256": "426a337738c64ed284103d8cdc8c36d0a03e2d3f7dc3322e1b3c6cdfbed2413e"
     },
     {
       "path": "backend/wiki_lint.py",
@@ -309,29 +309,34 @@
       "sha256": "2596f3afff5d5011c65143afa95e42980a77423b19cfc6de3bdbcf416366174f"
     },
     {
+      "path": "backend/wiki_usage.py",
+      "bytes": 8176,
+      "sha256": "848d7bfc2f969a7971abdee84f3bb7c007beac3ea547f42238c64c34f9e1695e"
+    },
+    {
       "path": "data/.gitkeep",
       "bytes": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
-      "path": "dist/assets/index-BiI_NDBs.js",
-      "bytes": 487499,
-      "sha256": "69aaab6de64ca5c36b0f64168541040942e18afb87660a01f6b4514c2007a86f"
+      "path": "dist/assets/index-Cxfcf0ys.css",
+      "bytes": 69753,
+      "sha256": "788e26cb3a455502c6595a55fb666dee8d90a1418ca74dfa57326e90d168268a"
     },
     {
-      "path": "dist/assets/index-hGyG7S2Z.css",
-      "bytes": 66545,
-      "sha256": "83e519a74bb8a148c55e11182f6170a3723a25b9e6c01d7846c07d91841fe2c1"
+      "path": "dist/assets/index-D7q8qauX.js",
+      "bytes": 492666,
+      "sha256": "4b546d29dbc1f026af060b9444dfa3c317608ef56852d0844b1f10f661010b5b"
     },
     {
       "path": "dist/index.html",
       "bytes": 848,
-      "sha256": "91f20a951bad18c8476ec96d54b7487ddb1c955e60d3cf33d589b836a53f4ff3"
+      "sha256": "741afdd07cd6bb211b038af34b86aa26cb9811c84cea07519d184ac0c77a0545"
     },
     {
       "path": "docs/DATABASE_PLAN.md",
-      "bytes": 5366,
-      "sha256": "8174bf99a23cfc3835680092628aa9a59a781f0f852989dfb3cd3cbbfa275bbd"
+      "bytes": 5557,
+      "sha256": "b1af18965bb1689422391893542c67af88a863e36028f63d16a90752edd35ac0"
     },
     {
       "path": "docs/EXPERT_KNOWLEDGE_PLAN.md",
@@ -345,13 +350,13 @@
     },
     {
       "path": "docs/HANDOFF.md",
-      "bytes": 26263,
-      "sha256": "4560653d52f3f2641de027246c0da966669c9386f654cf100d887e3a059c38ee"
+      "bytes": 29514,
+      "sha256": "bc87200392ee505b38208e3c52431670741e76f0fb24e59a2ac8e7edb20735a0"
     },
     {
       "path": "docs/MARKDOWN_WIKI.md",
-      "bytes": 25168,
-      "sha256": "ea6084845af8cb27537877f392551b89f56f1af67d24f60ae82e304f041d5b50"
+      "bytes": 25900,
+      "sha256": "138eb71b58cb4c582568ffa42541088ba63f7b22a75d49eda4bc630e7addbcaa"
     },
     {
       "path": "docs/REPORT_AI_REFERENCE.md",
@@ -490,13 +495,13 @@
     },
     {
       "path": "src/ProcessingActivity.css",
-      "bytes": 3612,
-      "sha256": "a8400f7af8829e4b28218007a03e7c1052ebdba6c6853131c3b116df38d03407"
+      "bytes": 6822,
+      "sha256": "02f2fad4a0b255111ee19d6aa928322598610ee78c5029467d20c234e94e507d"
     },
     {
       "path": "src/ProcessingActivity.tsx",
-      "bytes": 5397,
-      "sha256": "5ff28ff5d03593f634a8e1937cd761a913d26c115ad1f35d1fa7cb3df23b300a"
+      "bytes": 5562,
+      "sha256": "218817979e6738ac0ce177bb5ac79970a5a59900822814d0c3068fcb987d5b7e"
     },
     {
       "path": "src/ResearchAnswerView.tsx",
@@ -532,6 +537,11 @@
       "path": "src/TermDictionary.tsx",
       "bytes": 10737,
       "sha256": "d02c2bc75f7ffd97adaa5a213d5a8439cbb53445f78732851dd1964ba326dfaf"
+    },
+    {
+      "path": "src/WikiJobActivity.tsx",
+      "bytes": 4195,
+      "sha256": "9ca5ed5254f51f5c1cc728b01f6989252b4ee94b21181a1f227b71b7c18c8342"
     },
     {
       "path": "src/WikiMarkdown.tsx",
@@ -592,6 +602,11 @@
       "path": "src/vite-env.d.ts",
       "bytes": 38,
       "sha256": "65996936fbb042915f7b74a200fcdde7e410f32a669b1ab9597cfaa4b0faddb5"
+    },
+    {
+      "path": "src/wikiUsage.ts",
+      "bytes": 1778,
+      "sha256": "5a5f2ec23070e8e1d7c6356e23d032944a1929896e3c9bebc93333ab182aba79"
     },
     {
       "path": "src/workspaceState.ts",
@@ -739,6 +754,16 @@
       "sha256": "4109f6e69afc01158bb4c9548439dd9232aa42866f044c7da327aef0a5e1e774"
     },
     {
+      "path": "tests/test_wiki_usage.py",
+      "bytes": 12223,
+      "sha256": "99201aa2bbcff27c5d34a532156033cd7bdd78270a3a7de584a8a122ed54ba85"
+    },
+    {
+      "path": "tests/wiki-usage.test.mjs",
+      "bytes": 1132,
+      "sha256": "f476b4a9d3196aa0b8a1c29c9d33f8d3047078937018351f98075055f591cf7f"
+    },
+    {
       "path": "tests/workspace-state.test.mjs",
       "bytes": 1367,
       "sha256": "ff3db2e408494a8518902cf9f27e7080c7d501edd35893c2b40f69a66adea934"
@@ -763,14 +788,16 @@
   "visibility": "private",
   "bootstrap_admin": "Read BOOTSTRAP_ADMIN_EMPLOYEE_ID from the untracked .env; local-only demo identity when unset.",
   "validation": {
-    "backend_tests": 268,
-    "frontend_tests": 16,
-    "frontend_build": "unchanged from previously verified build",
+    "backend_tests": 280,
+    "frontend_tests": 19,
+    "frontend_build": "TypeScript check and Vite production build passed",
     "external_model_calls": false,
     "conversation_browser_check": "isolated synthetic data and deterministic test model",
     "database_concurrency_tests": 14,
-    "test_detail": "Full backend suite: 268 passing, including 19 adaptive Wiki tests; frontend: 16 passing. Synthetic short-paper source compilation uses 1 call instead of the previous 13.",
+    "test_detail": "Full backend suite: 280 passing, including 12 Wiki usage tests; frontend: 19 passing. Usage tests cover both model roles, timeout/invalid JSON, missing token reports, database contention, restart, and real Wiki orchestration with fake responses.",
     "slow_inference_tests": 16,
-    "adaptive_wiki_tests": 19
+    "adaptive_wiki_tests": 19,
+    "wiki_usage_tests": 12,
+    "wiki_usage_browser_check": "Isolated synthetic DB: live usage, model details, partial/missing tokens, no-call jobs, and legacy history; no browser console errors."
   }
 }

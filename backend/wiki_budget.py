@@ -76,6 +76,7 @@ def extraction_model(llm):
     if not hasattr(llm, '_wiki_extractor'):
         service = load_ai_settings().light_llm
         llm._wiki_extractor = CompanyLLM(service, limits=llm.limits) if service else llm
+        if service:llm._wiki_extractor.wiki_role = "light"
     return llm._wiki_extractor
 
 

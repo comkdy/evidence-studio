@@ -11,6 +11,7 @@
 | 수치·조건 | measurements, claim_measurements, measurement_evidence, condition_values | parameter, raw 값·단위, 실험·모델 조건과 주장 사이 연결 |
 | 분류·전문가 | paper_classifications, paper_topics, expert_categories, expert_policies, expert_papers | 공유 분류 캐시와 전문가별 담당 범위 |
 | Markdown Wiki | wiki_files, wiki_revisions, wiki_jobs, wiki_topic_requests | 실제 .md 파일의 경로·hash·의존 근거·불변 버전 및 갱신 작업 |
+| Wiki 사용량 | wiki_job_runs, wiki_model_calls | job 실행·재개 이력, 실제 모델·단계별 호출, nullable token, 응답·실행 시간; 원문·prompt·인증정보 제외 |
 | 검색 | search_chunks, search_contexts, search_chunk_spans, retrieval_units, FTS 색인 | 문맥 구간·정확한 페이지 offset, 키워드 및 vector 검색 |
 | 작업·검토 | processing_tasks, ingestion_jobs, raw_watcher_status, page_review_requests, page_review_changes | 수집·Wiki 작업 상태와 사용자 교정 이력 |
 | 사용자·용어 | users, user_audit, terminology_entries, terminology_revisions | 권한, 접속 사용자, 승인된 대표 용어·동의어 및 수정 이력 |

@@ -289,6 +289,8 @@ def wiki_job(job_id:int):
     require_permission('refresh_wiki')
     with connect() as db:
         row=db.execute('SELECT id,scope,expert_id,state,error,created_at,finished_at FROM wiki_jobs WHERE id=?',(job_id,)).fetchone()
+        from .wiki_usage import job_usages
+        usage=job_usages(db,[job_id]).get(job_id)
     if not row:
         raise HTTPException(404,'Wiki 갱신 요청을 찾을 수 없습니다.')
-    return dict(row)
+    return dict(row,usage=usage)

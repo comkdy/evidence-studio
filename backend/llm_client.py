@@ -12,6 +12,7 @@ from urllib.request import Request, build_opener, HTTPSHandler
 from .ai_settings import load_ai_settings
 from .embedding_client import NoRedirect
 from .research_progress import checkpoint, stage
+from .wiki_usage import begin_model_call, mark_model_sent
 
 
 class LLMError(ValueError):
@@ -98,9 +99,12 @@ class CompanyLLM:
         checkpoint()
         started = time.monotonic()
         status = 'failed'
+        recorded = None
+        usage_offset = len(self.usage_history)
         try:
             if not self.configured:
                 raise LLMError('사내 LLM 주소·모델·API key를 설정해야 합니다.')
+            recorded = begin_model_call(self,payload)
             queue_deadline = started + self.limits.llm_queue_timeout_seconds
             if deadline is not None:
                 queue_deadline = min(queue_deadline, deadline)
@@ -125,6 +129,8 @@ class CompanyLLM:
             status = type(error).__name__
             raise
         finally:
+            if recorded:
+                recorded.finish(status,self.usage_history[-1] if len(self.usage_history)>usage_offset else {})
             self.call_history.append(dict(status=status, elapsed_ms=round((time.monotonic()-started)*1000),
                                           input_chars=len(system)+len(json.dumps(payload,ensure_ascii=False))))
 
@@ -151,7 +157,9 @@ class CompanyLLM:
         try:
             req = Request(endpoint, data=json.dumps(body, ensure_ascii=False).encode(),
                           headers={'Authorization': 'Bearer '+key, 'Content-Type': 'application/json'}, method='POST')
-            with build_opener(NoRedirect(), HTTPSHandler(context=ssl.create_default_context())).open(req, timeout=timeout) as response:
+            opener=build_opener(NoRedirect(), HTTPSHandler(context=ssl.create_default_context()))
+            mark_model_sent()
+            with opener.open(req, timeout=timeout) as response:
                 raw = response.read(2_000_001)
             checkpoint()
             if len(raw) > 2_000_000:
