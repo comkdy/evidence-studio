@@ -66,6 +66,34 @@ class WikiPackingTests(unittest.TestCase):
             self.assertEqual(span['document_id'],page['document_id'])
             self.assertEqual(span['quote'],page['text'][span['start_offset']:span['end_offset']])
 
+    def test_typographic_citation_publishes_raw_spans_without_extra_calls(self):
+        paper=self.paper(count=1)
+        raw='The require-\nment of thin\u2011film devices exceeds 100 mA.'
+        paper['pages'][0]['text']=raw
+        paper['hash']=digest(paper['pages'])
+        def sections(evidence):
+            key=next(iter(evidence))
+            return {'sections':[{'heading':'Fact','statements':[{
+                'text':'The reported condition is retained.','evidence_ids':[key],
+                'quotes':{key:'The requirement of thin-film devices exceeds 100mA.'}}]}]}
+        self.model.sections=sections
+        root=self.run_source(paper)[0]
+        self.assertEqual(len(self.model.calls),1)
+        self.assert_spans(root,paper)
+        self.assertEqual(json.loads(root['refs_json'])['source_spans'][0]['quote'],raw)
+        before=(self.store.root/root['path']).read_bytes()
+        self.model.identity='changed-model'
+        def bad(evidence):
+            output=sections(evidence)
+            quotes=output['sections'][0]['statements'][0]['quotes']
+            for key in quotes:quotes[key]=quotes[key].replace('100mA','100A')
+            return output
+        self.model.sections=bad
+        with self.assertRaisesRegex(WikiError,'quote_not_found'):
+            self.run_source(paper)
+        self.assertEqual((self.store.root/root['path']).read_bytes(),before)
+        self.assertEqual(len(self.model.calls),2)
+
     def test_ten_short_pages_use_one_call_with_original_page_quotes(self):
         paper=self.paper()
         rows=self.run_source(paper)

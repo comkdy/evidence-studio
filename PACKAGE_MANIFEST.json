@@ -1,6 +1,6 @@
 {
   "app": "Evidence Studio",
-  "release": "github-diagnostics-2026-10-15",
+  "release": "github-citation-validation-2026-10-15",
   "database": "Absent; schema and baseline settings initialize on first launch.",
   "wiki": "Empty; documents are regenerated after ingest.",
   "raw_pdf_count": 0,
@@ -160,8 +160,8 @@
     },
     {
       "path": "backend/pilot_curate.py",
-      "bytes": 7303,
-      "sha256": "26a0a2b73d823bc0243166c1663844c80a3b0d503db6edfaffb6c5e82da975f7"
+      "bytes": 6784,
+      "sha256": "0bcb3c2659b1ba4093f28addbe36531901ed2535f6a8397dfcd95961ab6d5aa6"
     },
     {
       "path": "backend/pilot_db.py",
@@ -180,8 +180,8 @@
     },
     {
       "path": "backend/processing.py",
-      "bytes": 14116,
-      "sha256": "95eb32f13f72cb755977a5ef6eaeab85153792a2b4d4f70821d199a6511e37f3"
+      "bytes": 14133,
+      "sha256": "4fb13712eefa66ad117b50e9a881761e15ddcb9063a4c812b49fddf3256dfdad"
     },
     {
       "path": "backend/prompts/abstract_summary_ko.txt",
@@ -210,18 +210,23 @@
     },
     {
       "path": "backend/prompts/wiki_compile.txt",
-      "bytes": 1059,
-      "sha256": "c69d0107c5dc9b45a7767c83912e218b311dbe9f1ab180bc3480879e528ca39a"
+      "bytes": 1296,
+      "sha256": "ffb2a5a7576b1b765469fe7c2209309c97dec28803e17c149d211b2026270ea1"
     },
     {
       "path": "backend/prompts/wiki_lint.txt",
-      "bytes": 641,
-      "sha256": "dd54f4e93e8064fc5d4acc5367ec03eaf1eda489f44201926599f35f63a48d48"
+      "bytes": 778,
+      "sha256": "72d06c7a9f109a128f5a69cfe83d62a6530226ef9138aac95729bb54fe3e0592"
     },
     {
       "path": "backend/prompts/wiki_policy.md",
-      "bytes": 5349,
-      "sha256": "aac4641073e48e84ed19a5f09b3110fa4cba338a0318ce11699044c4441dad76"
+      "bytes": 5679,
+      "sha256": "e5b63daf702a525fbcfe4faef164b4a6d66ddc6e43dd9e83a885687e3a4b9a85"
+    },
+    {
+      "path": "backend/quote_matching.py",
+      "bytes": 9179,
+      "sha256": "093dac37ca8913470d9dff144ed0d5f7c7febb433924f88861f7d5bc800b9598"
     },
     {
       "path": "backend/reindex_search.py",
@@ -305,13 +310,13 @@
     },
     {
       "path": "backend/wiki_engine.py",
-      "bytes": 43828,
-      "sha256": "426a337738c64ed284103d8cdc8c36d0a03e2d3f7dc3322e1b3c6cdfbed2413e"
+      "bytes": 43760,
+      "sha256": "c197a31275da43c2d2b056e0a1ddb92b0478b5e5ac4ea3ff267e48b2b13ae0ca"
     },
     {
       "path": "backend/wiki_lint.py",
-      "bytes": 12912,
-      "sha256": "fab3f72491175924e9a91866bd50c668e0d31ad24eab35c4c72c5671a8a8db7c"
+      "bytes": 14005,
+      "sha256": "a39d42425254c76d29da3d5a8ad41998fb5ea2b32ebd02838961838d9a9d48e5"
     },
     {
       "path": "backend/wiki_policy.py",
@@ -325,8 +330,8 @@
     },
     {
       "path": "backend/wiki_store.py",
-      "bytes": 10339,
-      "sha256": "2596f3afff5d5011c65143afa95e42980a77423b19cfc6de3bdbcf416366174f"
+      "bytes": 10668,
+      "sha256": "4837062afd319839bd30c20cfb2e02537a3fd6093b883d3403db5060b8463f86"
     },
     {
       "path": "backend/wiki_usage.py",
@@ -339,19 +344,19 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
-      "path": "dist/assets/index-Cxfcf0ys.css",
-      "bytes": 69753,
-      "sha256": "788e26cb3a455502c6595a55fb666dee8d90a1418ca74dfa57326e90d168268a"
+      "path": "dist/assets/index-B9xto8uh.js",
+      "bytes": 492746,
+      "sha256": "9e2461f876c41c5965216beb87948cfcbf1c6d279128af69da9d16155e30d451"
     },
     {
-      "path": "dist/assets/index-D7q8qauX.js",
-      "bytes": 492666,
-      "sha256": "4b546d29dbc1f026af060b9444dfa3c317608ef56852d0844b1f10f661010b5b"
+      "path": "dist/assets/index-D8doMkjW.css",
+      "bytes": 69940,
+      "sha256": "42ae3734702e8a67bee2310bb3e14dd685ea10e20000b82eec118704607fb767"
     },
     {
       "path": "dist/index.html",
       "bytes": 848,
-      "sha256": "741afdd07cd6bb211b038af34b86aa26cb9811c84cea07519d184ac0c77a0545"
+      "sha256": "c5d8eb340e9553608d959bbd196a284a905d10fdd608ff6b50cb6220427723b0"
     },
     {
       "path": "docs/DATABASE_PLAN.md",
@@ -380,8 +385,8 @@
     },
     {
       "path": "docs/MARKDOWN_WIKI.md",
-      "bytes": 25900,
-      "sha256": "138eb71b58cb4c582568ffa42541088ba63f7b22a75d49eda4bc630e7addbcaa"
+      "bytes": 29829,
+      "sha256": "2ae7a0e928f4530f967793818301d85512b1d1977fcf3ff5410c3b244022d24f"
     },
     {
       "path": "docs/REPORT_AI_REFERENCE.md",
@@ -520,8 +525,8 @@
     },
     {
       "path": "src/ProcessingActivity.css",
-      "bytes": 6822,
-      "sha256": "02f2fad4a0b255111ee19d6aa928322598610ee78c5029467d20c234e94e507d"
+      "bytes": 7011,
+      "sha256": "4a77d80e4588e1c64899cb3c93faa0daf47b84fb92abdfddc89cb46e0604164f"
     },
     {
       "path": "src/ProcessingActivity.tsx",
@@ -565,8 +570,8 @@
     },
     {
       "path": "src/WikiJobActivity.tsx",
-      "bytes": 4195,
-      "sha256": "9ca5ed5254f51f5c1cc728b01f6989252b4ee94b21181a1f227b71b7c18c8342"
+      "bytes": 4272,
+      "sha256": "8cc94c8d090fbf21cb2a75cb9eddc65ec7227385301b6a3b64f509b3e45ddf4f"
     },
     {
       "path": "src/WikiMarkdown.tsx",
@@ -630,8 +635,8 @@
     },
     {
       "path": "src/wikiUsage.ts",
-      "bytes": 1778,
-      "sha256": "5a5f2ec23070e8e1d7c6356e23d032944a1929896e3c9bebc93333ab182aba79"
+      "bytes": 1792,
+      "sha256": "d3f597b00884c51c1ca5a70e945ce4581ea026d053b6746b979f3b3dde8fad10"
     },
     {
       "path": "src/workspaceState.ts",
@@ -720,8 +725,8 @@
     },
     {
       "path": "tests/test_markdown_wiki.py",
-      "bytes": 24074,
-      "sha256": "531dcd464ec06ff4fda5130f658b09f5d3cd0ae4f1d50ac5c4f8d0596153d360"
+      "bytes": 25864,
+      "sha256": "b7baa0d92f39ea2e22ca21ea8d75cc0a41a899addc5a7786e7dc521fde29ffbb"
     },
     {
       "path": "tests/test_page_review.py",
@@ -737,6 +742,11 @@
       "path": "tests/test_processing.py",
       "bytes": 8501,
       "sha256": "bd92e9db09b3296901a11f1b8fca6de4b721dfe72aef038a318cab47412c9188"
+    },
+    {
+      "path": "tests/test_quote_matching.py",
+      "bytes": 11655,
+      "sha256": "ceebe4089cdd0a11b11efcfea831af11552be49f2b5c35968c0b86f7eefde5fa"
     },
     {
       "path": "tests/test_research_answers.py",
@@ -780,13 +790,18 @@
     },
     {
       "path": "tests/test_wiki_packing.py",
-      "bytes": 15137,
-      "sha256": "4109f6e69afc01158bb4c9548439dd9232aa42866f044c7da327aef0a5e1e774"
+      "bytes": 16571,
+      "sha256": "edc46dc6250f569691016c3953399f8310f37391fc0a56ac751e6b2b2939d867"
     },
     {
       "path": "tests/test_wiki_usage.py",
-      "bytes": 12223,
-      "sha256": "99201aa2bbcff27c5d34a532156033cd7bdd78270a3a7de584a8a122ed54ba85"
+      "bytes": 13000,
+      "sha256": "5e5e5cc5642d99cc47c8778cc42b672d322ccd1d25a378ca3b59da8a328bab34"
+    },
+    {
+      "path": "tests/wiki-job-activity.test.mjs",
+      "bytes": 1755,
+      "sha256": "87cf8613ca4e4bbfcaf250928d77bfb167ef7916dc610af331d4a85cf084f25e"
     },
     {
       "path": "tests/wiki-usage.test.mjs",
@@ -818,18 +833,20 @@
   "visibility": "private",
   "bootstrap_admin": "Read BOOTSTRAP_ADMIN_EMPLOYEE_ID from the untracked .env; local-only demo identity when unset.",
   "validation": {
-    "backend_tests": 291,
-    "frontend_tests": 19,
-    "frontend_build": "Unchanged from verified TypeScript/Vite build; this release only adds CLI diagnostics and documentation.",
+    "backend_tests": 313,
+    "frontend_tests": 21,
+    "frontend_build": "TypeScript and Vite production build passed; refreshed tracked dist assets.",
     "external_model_calls": false,
     "conversation_browser_check": "isolated synthetic data and deterministic test model",
     "database_concurrency_tests": 14,
-    "test_detail": "291 backend tests passed inside the isolated diagnostic runner, including 11 new diagnostic tests. Default ingest/curation/chunking checks passed. Live-protocol checks used only a local fake HTTP provider for LLM/light LLM, embedding, reranker, semantic chunking, Wiki lifecycle and answer workflow.",
+    "test_detail": "313 backend tests passed inside the isolated diagnostic runner. Ingest, curation and chunking diagnostic stages passed. 21 frontend tests passed, including rendered Wiki failure messages and HTML escaping. Only synthetic fixtures and local fake HTTP providers were used; no internal model API calls.",
     "slow_inference_tests": 16,
-    "adaptive_wiki_tests": 19,
-    "wiki_usage_tests": 12,
+    "adaptive_wiki_tests": 20,
+    "wiki_usage_tests": 13,
     "wiki_usage_browser_check": "Isolated synthetic DB: live usage, model details, partial/missing tokens, no-call jobs, and legacy history; no browser console errors.",
     "diagnostic_runner_tests": 11,
-    "diagnostic_report_validation": "HTML structure, escaping, missing usage and offline dependencies verified; rendered preview unavailable because browser policy blocks file URLs."
+    "diagnostic_report_validation": "HTML structure, escaping, missing usage and offline dependencies verified; rendered preview unavailable because browser policy blocks file URLs.",
+    "citation_matching_tests": 19,
+    "citation_integration_tests": "Wiki publication preserves raw spans and existing documents on rejection; error reasons reach processing history; lint records raw quotes and offsets."
   }
 }

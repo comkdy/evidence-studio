@@ -74,6 +74,20 @@ class WikiUsageTests(unittest.TestCase):
         initialize(self.db)
         self.assertEqual(self.usage(job_id),u)  # restart/schema initialization does not erase records
 
+    def test_citation_failure_reason_and_location_reach_processing_history(self):
+        from backend.quote_matching import QuoteMatchError
+        from backend.wiki_store import WikiCitationError
+        error=WikiCitationError(QuoteMatchError('quote_ambiguous'),'paper p1 / p.3 / evidence raw-3')
+        def action():raise error
+        job_id,result=self.run_job(action)
+        self.assertEqual(result['status'],'failed')
+        status=processing_status(self.db)
+        job=next(j for j in status['wiki_jobs'] if j['id']==job_id)
+        self.assertEqual(job['state'],'failed')
+        self.assertIn('quote_ambiguous',job['error'])
+        self.assertIn('p.3',job['error'])
+        self.assertTrue(any('quote_ambiguous' in task['detail'] for task in status['tasks']))
+
     def test_missing_partial_and_zero_usage_are_not_confused(self):
         usages=[None,{'prompt_tokens':0,'completion_tokens':0,'total_tokens':0},
                 {'prompt_tokens':30},{'prompt_tokens':10,'completion_tokens':5},

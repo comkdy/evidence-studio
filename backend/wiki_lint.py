@@ -10,6 +10,8 @@ from .llm_client import CompanyLLM, LLMError
 from .wiki_store import WikiStore, WikiError, atomic_write, safe_path, parse_markdown, digest
 from .wiki_engine import snapshot, current, enqueue, escaped
 from .wiki_policy import load_prompt
+from .quote_matching import locate_quote, QuoteMatchError
+from .wiki_store import WikiCitationError
 
 LINT_INTERVAL = timedelta(hours=24)
 FULL_REVIEW_INTERVAL = timedelta(days=30)
@@ -51,9 +53,27 @@ def validate_grounding(row, body, state, catalogue, store):
                 problems.append('Wiki 저장소 밖의 링크')
     for span in refs['source_spans']:
         page = next((pg for p in papers for pg in p['pages'] if pg['id']==span['page_id']),None)
-        if not page or page['text'][span['start_offset']:span['end_offset']] != span['quote']:
-            problems.append('원문 인용 위치 불일치')
+        start, end = span['start_offset'], span['end_offset']
+        # Stored provenance must still be EXACT, even if the text would match
+        # after typography normalization. Never relocate or repair it in lint.
+        if (not page or type(start) is not int or type(end) is not int
+                or not 0 <= start < end <= len(page['text'])
+                or page['text'][start:end] != span['quote']):
+            problems.append('원문 인용 위치 불일치 [quote_source_changed] · 원문 또는 저장 위치가 변경되었습니다. 원천 근거 확인 후 Wiki를 갱신하세요.')
     return sorted(set(problems))
+
+
+def validate_lint_finding(item, piece, offset=0):
+    if (not isinstance(item, dict) or item.get('severity') not in ('warning', 'error')
+            or not all(isinstance(item.get(k), str) and 1 <= len(item[k]) <= 1600
+                       for k in ('quote', 'issue', 'suggestion'))):
+        raise WikiError('LLM lint 검토 의견 형식이 올바르지 않습니다.')
+    try:
+        start, end = locate_quote(piece, item['quote'])
+    except QuoteMatchError as error:
+        raise WikiCitationError(error, 'lint 검사 중인 Wiki 본문') from None
+    return dict(severity=item['severity'], issue=item['issue'], suggestion=item['suggestion'],
+                quote=piece[start:end], start_offset=offset+start, end_offset=offset+end)
 
 
 def run_lint(database=None, *, due_only=False, use_llm=True, llm=None):
@@ -139,9 +159,7 @@ def run_lint(database=None, *, due_only=False, use_llm=True, llm=None):
                     if not isinstance(items,list) or len(items)>12:
                         raise WikiError('LLM lint 응답 형식이 올바르지 않습니다.')
                     for item in items:
-                        if not isinstance(item,dict) or item.get('severity') not in ('warning','error') or not all(isinstance(item.get(k),str) and 1<=len(item[k])<=1600 for k in ('quote','issue','suggestion')) or item['quote'] not in piece:
-                            raise WikiError('LLM lint가 검사 문서에 없는 구절을 지적했습니다.')
-                        page_findings.append(dict(page_id=row['id'],**item))
+                        page_findings.append(dict(page_id=row['id'], **validate_lint_finding(item, piece, start)))
                     next_offset=min(len(body),start+14000)
                     # Checkpoint every successful piece, even if a later request times out.
                     with connect(database) as db:
@@ -152,7 +170,9 @@ def run_lint(database=None, *, due_only=False, use_llm=True, llm=None):
                 findings.extend(page_findings)
                 checked += int(complete)
             except (WikiError, LLMError) as error:
-                findings.append(dict(page_id=row['id'],severity='error',issue=str(error),suggestion='기존 문서를 보존했습니다. 검토 후 다시 점검하세요.'))
+                findings.append(dict(page_id=row['id'],severity='error',issue=str(error),
+                    **({'code': error.code} if isinstance(error, WikiCitationError) else {}),
+                    suggestion='기존 문서를 보존했습니다. 검토 후 다시 점검하세요.'))
                 if isinstance(error,LLMError):
                     use_llm = False  # Avoid dozens of calls after one connection failure.
         status = 'completed' if checked==eligible else 'partial'

@@ -14,6 +14,14 @@ class WikiError(ValueError):
     pass
 
 
+class WikiCitationError(WikiError):
+    """A stable reason code plus a bounded source location for jobs and lint."""
+    def __init__(self, error, context=''):
+        self.code = error.code
+        context = ' '.join(str(context).split())[:240]
+        super().__init__(str(error) + ('\n위치: '+context if context else ''))
+
+
 def digest(value):
     if not isinstance(value, str):
         value = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))

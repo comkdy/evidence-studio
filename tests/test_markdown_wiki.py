@@ -243,6 +243,35 @@ class MarkdownWikiTests(unittest.TestCase):
             bounded=run_lint(self.db,llm=llm)
         self.assertEqual(bounded['llm_calls'],1);self.assertLessEqual(bounded['review_chars'],60000)
 
+    def test_lint_typography_is_anchored_to_body_and_bad_quote_is_reported(self):
+        self.sync(FakeLLM())
+        files={r['path']:(self.store.root/r['path']).read_bytes() for r in self.store.rows()}
+        llm=FakeLLM()
+        def review(system,payload):
+            # Markdown contains line breaks. A model may flatten only whitespace.
+            phrase=payload['wiki'].strip()
+            quote=' '.join(phrase.split())
+            if len(quote)>1500:
+                return {'findings':[]}
+            return {'findings':[dict(severity='warning',quote=quote,issue='조건 검토',suggestion='원문 확인')]}
+        llm.complete_json=review
+        report=run_lint(self.db,llm=llm)
+        self.assertGreater(report['llm_calls'],0)
+        with connect(self.db) as db:
+            findings=json.loads(db.execute('SELECT findings_json FROM wiki_lint_runs ORDER BY created_at DESC LIMIT 1').fetchone()[0])
+        anchored=[f for f in findings if 'start_offset' in f]
+        self.assertTrue(anchored)
+        for item in anchored:
+            _,body=self.store.read(self.store.record(item['page_id']))
+            self.assertEqual(body[item['start_offset']:item['end_offset']],item['quote'])
+        llm.identity='bad-lint-model'
+        llm.complete_json=lambda *a:{'findings':[dict(severity='error',quote='This invented quotation never existed.',issue='Check',suggestion='Review')]}
+        run_lint(self.db,llm=llm)
+        with connect(self.db) as db:
+            findings=json.loads(db.execute('SELECT findings_json FROM wiki_lint_runs ORDER BY created_at DESC LIMIT 1').fetchone()[0])
+        self.assertTrue(any(f.get('code')=='quote_not_found' for f in findings))
+        for path,content in files.items():self.assertEqual((self.store.root/path).read_bytes(),content)
+
     def test_lint_reports_manual_damage_without_changing_file(self):
         self.sync();row=self.source();path=self.store.root/row['path']
         path.write_text(path.read_text(encoding='utf-8')+'\nBroken edit\n',encoding='utf-8')

@@ -3,5 +3,5 @@ source/source_part는 원천 지식 정리, topic/specialization은 개념·질�
 아래 JSON만 반환한다. 파일 경로, frontmatter, 명령, HTML, 이미지, 외부 링크는 생성하지 않는다.
 {"sections":[{"heading":"내용이 드러나는 제목","statements":[{"text":"근거와 조건을 보존한 진술","evidence_ids":["제공된 evidence ID"],"quotes":{}}]}]}
 sections는 1~6개, 각 statements는 1~8개로 제한한다. 모든 진술에는 최소 하나의 evidence_ids가 필요하다.
-evidence에 kind=source_text가 있으면 해당 ID에 대한 연속된 정확한 원문 인용을 quotes 객체에 넣는다. 공백 차이를 제외하고 원문에 없는 인용은 금지한다.
+evidence에 kind=source_text가 있으면 해당 ID에 대한 연속된 정확한 원문 인용을 quotes 객체에 넣는다. 인용은 원문에서 복사하며 요약·번역·철자 교정·scientific notation 변환·문구 생략을 하지 않는다. 인용은 12자 이상이며 같은 구절이 반복되면 앞뒤 문맥을 더 포함한다. 페이지 또는 원문 조각을 넘는 인용은 각 evidence ID별로 나눈다.
 이미 정리된 kind=claim 또는 wiki 근거에는 quotes가 필요 없다. 근거 ID를 발명하거나 제공되지 않은 사실을 추가하지 않는다.

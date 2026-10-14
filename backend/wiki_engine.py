@@ -148,7 +148,8 @@ def merge_refs(items, state, expert_id=None):
 
 
 def validate_sections(result, evidence, allow_empty=False):
-    from .pilot_curate import locate_quote
+    from .quote_matching import locate_evidence_quote, QuoteMatchError
+    from .wiki_store import WikiCitationError
     sections = result.get('sections')
     if not isinstance(sections, list) or len(sections) > 6 or (not sections and not allow_empty):
         raise WikiError('LLM Wiki sections 형식이 올바르지 않습니다.')
@@ -171,13 +172,11 @@ def validate_sections(result, evidence, allow_empty=False):
             for key in ids:
                 e = evidence[key]
                 if e['kind'] == 'source_text':
-                    quote = quotes.get(key)
-                    if not isinstance(quote, str) or len(quote.strip()) < 12:
-                        raise WikiError('새 원문에서 추출한 지식에는 정확한 인용이 필요합니다.')
+                    quote = quotes.get(key, '')
                     try:
-                        start, end = locate_quote(e['text'], quote)
-                    except ValueError:
-                        raise WikiError('Wiki 인용과 원문이 일치하지 않습니다.') from None
+                        start, end = locate_evidence_quote(evidence, key, quote)
+                    except QuoteMatchError as error:
+                        raise WikiCitationError(error, f"paper {e['paper_id']} · p.{e['page_number']} · 근거 {key}") from None
                     matches.append(dict(paper_id=e['paper_id'], page_id=e['page_id'], document_id=e['document_id'],
                                         page_number=e['page_number'], start_offset=e['offset']+start,
                                         end_offset=e['offset']+end, quote=e['text'][start:end]))

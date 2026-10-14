@@ -168,7 +168,7 @@ def processing_status(database=None):
         usage=job_usages(db,[j['id'] for j in visible_jobs])
         wiki_activity=[dict(id=j['id'],scope=j['scope'],state=j['state'],
             label=experts.get(j['expert_id'],'전문가')+' Wiki 갱신' if j['scope']=='expert' else '공통 Wiki 갱신' if j['scope']=='common' else '지식 자동 반영',
-            created_at=j['created_at'],finished_at=j['finished_at'],usage=usage[j['id']]) for j in visible_jobs]
+            created_at=j['created_at'],finished_at=j['finished_at'],error=j['error'],usage=usage[j['id']]) for j in visible_jobs]
         review_count=db.execute("SELECT count(*) FROM pages p JOIN paper_documents d ON d.current_run_id=p.run_id WHERE p.status NOT IN ('ready','excluded')").fetchone()[0]
     waiting_papers={pid for r in waiting if not r['expert_id'] for pid in json.loads(r['refs_json']).get('paper_ids',[])}
     waiting_experts={r['expert_id'] for r in waiting if r['expert_id']}

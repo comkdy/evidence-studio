@@ -16,6 +16,7 @@ export function WikiJobActivity({jobs}:{jobs:WikiJob[]}){
    const u=job.usage;
    return <article className={'wiki-usage-job '+job.state} key={job.id} aria-label={`Wiki 작업 #${job.id}`}>
     <header><div><strong>{job.label}</strong><span>#{job.id} · {time(job.created_at)}</span></div><span className="wiki-job-state">{states[job.state]}</span></header>
+    {job.error&&<p className="wiki-job-error" role="status">{job.error}</p>}
     {u.available?<>
      <p className="wiki-model-list">{u.models.length?u.models.map(model=><span key={model.key}><b>{model.model}</b><small>{model.role==='light'?'경량':'기본'}</small></span>):'LLM 호출 없음'}</p>
      <dl className="wiki-usage-totals">

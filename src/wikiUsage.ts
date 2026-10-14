@@ -1,7 +1,7 @@
 export type UsageCounts={calls:number;completed:number;failed:number;running:number;interrupted:number;waiting:number;not_sent:number;model_elapsed_ms:number;input_tokens:number|null;output_tokens:number|null;total_tokens:number|null;input_reports:number;output_reports:number;total_reports:number};
 export type ModelUsage=UsageCounts&{key:string;model:string;role:'default'|'light';phases:string[]};
 export type WikiUsage={available:false;models:ModelUsage[]}|(UsageCounts&{available:true;models:ModelUsage[];attempts:number;interrupted_attempts:number;started_at:string;elapsed_ms:number});
-export type WikiJob={id:number;scope:'all'|'common'|'expert';label:string;state:'queued'|'running'|'done'|'failed';created_at:string;finished_at:string|null;usage:WikiUsage};
+export type WikiJob={id:number;scope:'all'|'common'|'expert';label:string;state:'queued'|'running'|'done'|'failed';created_at:string;finished_at:string|null;error?:string;usage:WikiUsage};
 
 export function tokenLabel(value:number|null,reported:number,calls:number){
  if(calls===0)return '0';

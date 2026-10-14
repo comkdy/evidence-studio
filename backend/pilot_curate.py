@@ -10,18 +10,8 @@ from .expert_config import refresh_expert_policies
 from .scientific_values import validate_scientific_value
 from .chunking import load_chunk_policy, reindex_document, prepare_document_index, validate_prepared_input
 
-def locate_quote(text, quote):
-    # Match only whitespace-normalized literal text; never fuzzy-match a scientific value.
-    chars=[];positions=[]
-    for token in re.finditer(r"\S+",text):
-        if chars: chars.append(" ");positions.append(token.start())
-        chars.extend(token.group());positions.extend(range(token.start(),token.end()))
-    normalized="".join(chars)
-    wanted=" ".join(quote.split())
-    start=normalized.find(wanted)
-    if start<0 or normalized.find(wanted,start+1)>=0:
-        raise ValueError("Source quotation is missing or ambiguous")
-    return positions[start], positions[start+len(wanted)-1]+1
+# Keep the import location compatible with existing curation callers.
+from .quote_matching import locate_quote
 
 def apply_curation(path,db_path=None):
     initialize(db_path)
