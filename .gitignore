@@ -1,0 +1,34 @@
+# Local dependencies and generated state
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.tsbuildinfo
+.pytest_cache/
+.env*
+!.env.example
+.dev.vars
+.openai/
+artifacts/
+tmp/
+data/*
+!data/.gitkeep
+wiki/*
+!wiki/.gitkeep
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.zip
+*.zip.[0-9][0-9][0-9]
+*.tar.gz
+*.log
+
+# New company PDFs stay local unless deliberately added.
+# The original 41 PDFs are explicitly staged for this one-time handoff.
+raw/*
+!raw/.gitkeep
+
+# dist/ is intentionally tracked so a clone can run without Node.js.

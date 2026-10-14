@@ -1,0 +1,17 @@
+{
+  "dataset_type": "test-demo",
+  "description": "합성 입력 형식 예시입니다. 실제 DB의 논문·근거 ID 또는 과학적 정답이 아닙니다. 팀 전문가가 확인한 ID와 질문으로 교체해야 합니다.",
+  "cases": [
+    {
+      "id": "test-demo-retention",
+      "question": "보존 특성의 측정 조건과 전력 추정의 조건을 비교하려면 어떤 근거가 필요한가?",
+      "expert_ids": ["dram"],
+      "expected_paper_ids": ["REPLACE_WITH_REVIEWED_PAPER_ID"],
+      "expected_reference_ids": {
+        "raw_only": ["passage:REPLACE_WITH_REVIEWED_PASSAGE_REFERENCE"],
+        "structured": ["claim:REPLACE_WITH_REVIEWED_CLAIM_ID"],
+        "with_wiki": ["claim:REPLACE_WITH_REVIEWED_CLAIM_ID"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+{
+  "request": {"model": "$model", "input": "$texts", "encoding_format": "float"},
+  "response": {"items_path": ["data"], "vector_path": ["embedding"], "index_field": "index"}
+}

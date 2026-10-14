@@ -1,0 +1,650 @@
+{
+  "spans": [
+    {
+      "paperId": "p1",
+      "documentVersion": "fixture-v1",
+      "extractionRunId": "demo-run-1",
+      "id": "p1-table",
+      "page": 6,
+      "section": "4.1 Retention test",
+      "locator": "Table 1 · row 1",
+      "kind": "table",
+      "quote": "DRAM-A exhibited a retention time of 120 ms at 85 °C and VDD = 1.1 V (32 dies)."
+    },
+    {
+      "paperId": "p1",
+      "documentVersion": "fixture-v1",
+      "extractionRunId": "demo-run-1",
+      "id": "p1-discussion",
+      "page": 8,
+      "section": "Discussion",
+      "locator": "Paragraph 2",
+      "kind": "paragraph",
+      "quote": "The measured margin may permit a longer refresh interval under the tested conditions."
+    },
+    {
+      "paperId": "p2",
+      "documentVersion": "fixture-v1",
+      "extractionRunId": "demo-run-1",
+      "id": "p2-table",
+      "page": 8,
+      "section": "4.2 Endurance",
+      "locator": "Table 1 · row 1",
+      "kind": "table",
+      "quote": "CT-A maintained RBER ≤ 10⁻³ for at least 3,000 program/erase cycles at 25 °C (16 dies)."
+    },
+    {
+      "paperId": "p2",
+      "documentVersion": "fixture-v1",
+      "extractionRunId": "demo-run-1",
+      "id": "p2-discussion",
+      "page": 10,
+      "section": "Discussion",
+      "locator": "Paragraph 2",
+      "kind": "paragraph",
+      "quote": "Charge trapping may contribute to the observed degradation; the mechanism was not directly measured."
+    },
+    {
+      "paperId": "p3",
+      "documentVersion": "fixture-v1",
+      "extractionRunId": "demo-run-1",
+      "id": "p3-table",
+      "page": 5,
+      "section": "3.2 Thermal evaluation",
+      "locator": "Table 1 · row 1",
+      "kind": "table",
+      "quote": "HBM-A reached a peak top-die temperature of 92 °C at 4.8 W, with an ambient temperature of 25 °C."
+    },
+    {
+      "paperId": "p3",
+      "documentVersion": "fixture-v1",
+      "extractionRunId": "demo-run-1",
+      "id": "p3-discussion",
+      "page": 7,
+      "section": "Discussion",
+      "locator": "Paragraph 2",
+      "kind": "paragraph",
+      "quote": "Improved heat spreading may reduce the top-die temperature, but an alternative stack was not tested."
+    },
+    {
+      "paperId": "p4",
+      "documentVersion": "fixture-v1",
+      "extractionRunId": "demo-run-1",
+      "id": "p4-table",
+      "page": 7,
+      "section": "4.1 Bandwidth evaluation",
+      "locator": "Table 1 · row 1",
+      "kind": "table",
+      "quote": "Link-B delivered 128 GB/s with eight channels under sequential traffic. Test temperature was not reported."
+    },
+    {
+      "paperId": "p4",
+      "documentVersion": "fixture-v1",
+      "extractionRunId": "demo-run-1",
+      "id": "p4-discussion",
+      "page": 9,
+      "section": "Discussion",
+      "locator": "Paragraph 2",
+      "kind": "paragraph",
+      "quote": "The proposed interconnect may improve package-level efficiency; energy per bit was not measured."
+    },
+    {
+      "paperId": "p5",
+      "documentVersion": "fixture-v1",
+      "extractionRunId": "demo-run-1",
+      "id": "p5-table",
+      "page": 9,
+      "section": "5.1 ECC latency",
+      "locator": "Table 1 · row 1",
+      "kind": "table",
+      "quote": "ECC-C showed a correction latency of 8 ns for single-bit errors at 25 °C. Supply voltage was not reported."
+    },
+    {
+      "paperId": "p5",
+      "documentVersion": "fixture-v1",
+      "extractionRunId": "demo-run-1",
+      "id": "p5-discussion",
+      "page": 11,
+      "section": "Discussion",
+      "locator": "Paragraph 2",
+      "kind": "paragraph",
+      "quote": "This policy may reduce system-level power under mixed workloads."
+    },
+    {
+      "paperId": "p6",
+      "documentVersion": "fixture-v1",
+      "extractionRunId": "demo-run-1",
+      "id": "p6-table",
+      "page": 4,
+      "section": "3.1 Accelerated retention",
+      "locator": "Table 1 · row 1",
+      "kind": "table",
+      "quote": "DRAM-B exhibited a retention time of 96 ms at 125 °C and VDD = 1.1 V (16 dies)."
+    },
+    {
+      "paperId": "p6",
+      "documentVersion": "fixture-v1",
+      "extractionRunId": "demo-run-1",
+      "id": "p6-discussion",
+      "page": 6,
+      "section": "Discussion",
+      "locator": "Paragraph 2",
+      "kind": "paragraph",
+      "quote": "Retention behavior may depend on both temperature and cell design; the two effects were not isolated."
+    }
+  ],
+  "claims": [
+    {
+      "id": "p1-result",
+      "paperId": "p1",
+      "kind": "result",
+      "attribution": "authors",
+      "summary": "DRAM-A의 retention time은 85 °C, 1.1 V 조건에서 120 ms로 보고되었다.",
+      "rawText": "DRAM-A exhibited a retention time of 120 ms at 85 °C and VDD = 1.1 V (32 dies).",
+      "scope": "DRAM-A / 85 °C / 1.1 V. 다른 temperature와 cell structure로 일반화하지 않음.",
+      "certainty": "해당 시험에서 관찰",
+      "validation": "passed",
+      "review": "unreviewed",
+      "evidence": [
+        {
+          "spanId": "p1-table",
+          "role": "statement"
+        },
+        {
+          "spanId": "p1-table",
+          "role": "support"
+        }
+      ],
+      "measurementIds": [
+        "p1-measure"
+      ],
+      "hasDirectSupport": true
+    },
+    {
+      "id": "p1-interpretation",
+      "paperId": "p1",
+      "kind": "interpretation",
+      "attribution": "authors",
+      "summary": "저자는 측정된 margin이 시험 조건에서 refresh interval을 늘리는 데 도움이 될 수 있다고 해석한다.",
+      "rawText": "The measured margin may permit a longer refresh interval under the tested conditions.",
+      "scope": "DRAM-A / 85 °C / 1.1 V. 다른 temperature와 cell structure로 일반화하지 않음.",
+      "certainty": "가능성 제시 · may",
+      "validation": "passed",
+      "review": "unreviewed",
+      "evidence": [
+        {
+          "spanId": "p1-discussion",
+          "role": "statement"
+        }
+      ],
+      "measurementIds": [],
+      "hasDirectSupport": false
+    },
+    {
+      "id": "p2-result",
+      "paperId": "p2",
+      "kind": "result",
+      "attribution": "authors",
+      "summary": "CT-A는 25 °C에서 최소 3,000 program/erase cycles 동안 RBER 기준을 만족했다고 보고되었다.",
+      "rawText": "CT-A maintained RBER ≤ 10⁻³ for at least 3,000 program/erase cycles at 25 °C (16 dies).",
+      "scope": "CT-A / 25 °C / RBER ≤ 10⁻³. Endurance의 최소값이며 정확한 lifetime이나 retention time은 아님.",
+      "certainty": "최소값으로 보고",
+      "validation": "passed",
+      "review": "unreviewed",
+      "evidence": [
+        {
+          "spanId": "p2-table",
+          "role": "statement"
+        },
+        {
+          "spanId": "p2-table",
+          "role": "support"
+        }
+      ],
+      "measurementIds": [
+        "p2-measure"
+      ],
+      "hasDirectSupport": true
+    },
+    {
+      "id": "p2-interpretation",
+      "paperId": "p2",
+      "kind": "interpretation",
+      "attribution": "authors",
+      "summary": "저자는 charge trapping이 관찰된 degradation에 기여할 가능성을 제시하지만, mechanism을 직접 측정하지는 않았다.",
+      "rawText": "Charge trapping may contribute to the observed degradation; the mechanism was not directly measured.",
+      "scope": "CT-A / 25 °C / RBER ≤ 10⁻³. Endurance의 최소값이며 정확한 lifetime이나 retention time은 아님.",
+      "certainty": "가능성 제시 · may",
+      "validation": "passed",
+      "review": "unreviewed",
+      "evidence": [
+        {
+          "spanId": "p2-discussion",
+          "role": "statement"
+        }
+      ],
+      "measurementIds": [],
+      "hasDirectSupport": false
+    },
+    {
+      "id": "p3-result",
+      "paperId": "p3",
+      "kind": "result",
+      "attribution": "authors",
+      "summary": "HBM-A의 peak top-die temperature는 ambient temperature 25 °C, 4.8 W 조건에서 92 °C로 보고되었다.",
+      "rawText": "HBM-A reached a peak top-die temperature of 92 °C at 4.8 W, with an ambient temperature of 25 °C.",
+      "scope": "HBM-A / top die / 4.8 W / ambient temperature 25 °C.",
+      "certainty": "해당 시험에서 관찰",
+      "validation": "passed",
+      "review": "unreviewed",
+      "evidence": [
+        {
+          "spanId": "p3-table",
+          "role": "statement"
+        },
+        {
+          "spanId": "p3-table",
+          "role": "support"
+        }
+      ],
+      "measurementIds": [
+        "p3-measure"
+      ],
+      "hasDirectSupport": true
+    },
+    {
+      "id": "p3-interpretation",
+      "paperId": "p3",
+      "kind": "interpretation",
+      "attribution": "authors",
+      "summary": "저자는 heat spreading 개선이 top-die temperature를 낮출 수 있다고 제안한다. 대안 stack의 검증 결과는 제시하지 않는다.",
+      "rawText": "Improved heat spreading may reduce the top-die temperature, but an alternative stack was not tested.",
+      "scope": "HBM-A / top die / 4.8 W / ambient temperature 25 °C.",
+      "certainty": "가능성 제시 · may",
+      "validation": "passed",
+      "review": "unreviewed",
+      "evidence": [
+        {
+          "spanId": "p3-discussion",
+          "role": "statement"
+        }
+      ],
+      "measurementIds": [],
+      "hasDirectSupport": false
+    },
+    {
+      "id": "p4-result",
+      "paperId": "p4",
+      "kind": "result",
+      "attribution": "authors",
+      "summary": "Link-B의 bandwidth는 8 channels, sequential traffic 조건에서 128 GB/s로 보고되었다.",
+      "rawText": "Link-B delivered 128 GB/s with eight channels under sequential traffic. Test temperature was not reported.",
+      "scope": "Link-B / 8 channels / sequential traffic. Test temperature 미기재.",
+      "certainty": "해당 시험에서 관찰",
+      "validation": "passed",
+      "review": "unreviewed",
+      "evidence": [
+        {
+          "spanId": "p4-table",
+          "role": "statement"
+        },
+        {
+          "spanId": "p4-table",
+          "role": "support"
+        }
+      ],
+      "measurementIds": [
+        "p4-measure"
+      ],
+      "hasDirectSupport": true
+    },
+    {
+      "id": "p4-interpretation",
+      "paperId": "p4",
+      "kind": "interpretation",
+      "attribution": "authors",
+      "summary": "저자는 interconnect가 package-level efficiency를 높일 가능성을 제시하지만, energy per bit를 측정하지 않았다.",
+      "rawText": "The proposed interconnect may improve package-level efficiency; energy per bit was not measured.",
+      "scope": "Link-B / 8 channels / sequential traffic. Test temperature 미기재.",
+      "certainty": "가능성 제시 · may",
+      "validation": "passed",
+      "review": "unreviewed",
+      "evidence": [
+        {
+          "spanId": "p4-discussion",
+          "role": "statement"
+        }
+      ],
+      "measurementIds": [],
+      "hasDirectSupport": false
+    },
+    {
+      "id": "p5-result",
+      "paperId": "p5",
+      "kind": "result",
+      "attribution": "authors",
+      "summary": "ECC-C는 25 °C의 single-bit error 조건에서 correction latency 8 ns를 보고했다.",
+      "rawText": "ECC-C showed a correction latency of 8 ns for single-bit errors at 25 °C. Supply voltage was not reported.",
+      "scope": "ECC-C / single-bit error / 25 °C. Supply voltage 미기재.",
+      "certainty": "해당 시험에서 관찰",
+      "validation": "passed",
+      "review": "unreviewed",
+      "evidence": [
+        {
+          "spanId": "p5-table",
+          "role": "statement"
+        },
+        {
+          "spanId": "p5-table",
+          "role": "support"
+        }
+      ],
+      "measurementIds": [
+        "p5-measure"
+      ],
+      "hasDirectSupport": true
+    },
+    {
+      "id": "p5-interpretation",
+      "paperId": "p5",
+      "kind": "hypothesis",
+      "attribution": "authors",
+      "summary": "저자는 mixed workloads에서 system-level power가 줄어들 가능성을 제시한다.",
+      "rawText": "This policy may reduce system-level power under mixed workloads.",
+      "scope": "ECC-C / single-bit error / 25 °C. Supply voltage 미기재.",
+      "certainty": "가능성 제시 · may",
+      "validation": "needs-review",
+      "review": "unreviewed",
+      "evidence": [
+        {
+          "spanId": "p5-discussion",
+          "role": "statement"
+        }
+      ],
+      "measurementIds": [],
+      "hasDirectSupport": false
+    },
+    {
+      "id": "p6-result",
+      "paperId": "p6",
+      "kind": "result",
+      "attribution": "authors",
+      "summary": "DRAM-B의 retention time은 125 °C, 1.1 V 조건에서 96 ms로 보고되었다.",
+      "rawText": "DRAM-B exhibited a retention time of 96 ms at 125 °C and VDD = 1.1 V (16 dies).",
+      "scope": "DRAM-B / 125 °C / 1.1 V. DRAM-A 시험과 대상·test temperature·sample size가 다름.",
+      "certainty": "해당 시험에서 관찰",
+      "validation": "passed",
+      "review": "unreviewed",
+      "evidence": [
+        {
+          "spanId": "p6-table",
+          "role": "statement"
+        },
+        {
+          "spanId": "p6-table",
+          "role": "support"
+        }
+      ],
+      "measurementIds": [
+        "p6-measure"
+      ],
+      "hasDirectSupport": true
+    },
+    {
+      "id": "p6-interpretation",
+      "paperId": "p6",
+      "kind": "interpretation",
+      "attribution": "authors",
+      "summary": "저자는 temperature와 cell design이 모두 retention behavior에 영향을 줄 가능성을 제시한다. 두 효과를 분리해 검증하지는 않았다.",
+      "rawText": "Retention behavior may depend on both temperature and cell design; the two effects were not isolated.",
+      "scope": "DRAM-B / 125 °C / 1.1 V. DRAM-A 시험과 대상·test temperature·sample size가 다름.",
+      "certainty": "가능성 제시 · may",
+      "validation": "passed",
+      "review": "unreviewed",
+      "evidence": [
+        {
+          "spanId": "p6-discussion",
+          "role": "statement"
+        }
+      ],
+      "measurementIds": [],
+      "hasDirectSupport": false
+    }
+  ],
+  "measurements": [
+    {
+      "id": "p1-measure",
+      "paperId": "p1",
+      "label": "Retention time",
+      "rawValue": "120 ms",
+      "value": 120,
+      "operator": "=",
+      "unit": "ms",
+      "normalizedValue": 0.12,
+      "normalizedUnit": "s",
+      "sample": "DRAM-A",
+      "evidenceIds": [
+        "p1-table"
+      ],
+      "conditions": [
+        {
+          "name": "Test temperature",
+          "rawValue": "85 °C",
+          "evidenceIds": [
+            "p1-table"
+          ]
+        },
+        {
+          "name": "Supply voltage",
+          "rawValue": "1.1 V",
+          "evidenceIds": [
+            "p1-table"
+          ]
+        },
+        {
+          "name": "Sample size",
+          "rawValue": "32 dies",
+          "evidenceIds": [
+            "p1-table"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p2-measure",
+      "paperId": "p2",
+      "label": "Program/erase endurance",
+      "rawValue": "≥ 3,000 cycles",
+      "value": 3000,
+      "operator": ">=",
+      "unit": "cycles",
+      "normalizedValue": 3000,
+      "normalizedUnit": "cycles",
+      "sample": "CT-A",
+      "evidenceIds": [
+        "p2-table"
+      ],
+      "conditions": [
+        {
+          "name": "Test temperature",
+          "rawValue": "25 °C",
+          "evidenceIds": [
+            "p2-table"
+          ]
+        },
+        {
+          "name": "Acceptance criterion",
+          "rawValue": "RBER ≤ 10⁻³",
+          "evidenceIds": [
+            "p2-table"
+          ]
+        },
+        {
+          "name": "Sample size",
+          "rawValue": "16 dies",
+          "evidenceIds": [
+            "p2-table"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p3-measure",
+      "paperId": "p3",
+      "label": "Peak top-die temperature",
+      "rawValue": "92 °C",
+      "value": 92,
+      "operator": "=",
+      "unit": "°C",
+      "normalizedValue": 365.15,
+      "normalizedUnit": "K",
+      "sample": "HBM-A",
+      "evidenceIds": [
+        "p3-table"
+      ],
+      "conditions": [
+        {
+          "name": "Power",
+          "rawValue": "4.8 W",
+          "evidenceIds": [
+            "p3-table"
+          ]
+        },
+        {
+          "name": "Ambient temperature",
+          "rawValue": "25 °C",
+          "evidenceIds": [
+            "p3-table"
+          ]
+        },
+        {
+          "name": "Measurement location",
+          "rawValue": "Top die",
+          "evidenceIds": [
+            "p3-table"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p4-measure",
+      "paperId": "p4",
+      "label": "Bandwidth",
+      "rawValue": "128 GB/s",
+      "value": 128,
+      "operator": "=",
+      "unit": "GB/s",
+      "normalizedValue": 128000000000,
+      "normalizedUnit": "B/s",
+      "sample": "Link-B",
+      "evidenceIds": [
+        "p4-table"
+      ],
+      "conditions": [
+        {
+          "name": "Channel count",
+          "rawValue": "8",
+          "evidenceIds": [
+            "p4-table"
+          ]
+        },
+        {
+          "name": "Traffic pattern",
+          "rawValue": "Sequential",
+          "evidenceIds": [
+            "p4-table"
+          ]
+        },
+        {
+          "name": "Test temperature",
+          "rawValue": null,
+          "evidenceIds": []
+        }
+      ]
+    },
+    {
+      "id": "p5-measure",
+      "paperId": "p5",
+      "label": "Correction latency",
+      "rawValue": "8 ns",
+      "value": 8,
+      "operator": "=",
+      "unit": "ns",
+      "normalizedValue": 8e-9,
+      "normalizedUnit": "s",
+      "sample": "ECC-C",
+      "evidenceIds": [
+        "p5-table"
+      ],
+      "conditions": [
+        {
+          "name": "Error model",
+          "rawValue": "Single-bit",
+          "evidenceIds": [
+            "p5-table"
+          ]
+        },
+        {
+          "name": "Test temperature",
+          "rawValue": "25 °C",
+          "evidenceIds": [
+            "p5-table"
+          ]
+        },
+        {
+          "name": "Supply voltage",
+          "rawValue": null,
+          "evidenceIds": []
+        }
+      ]
+    },
+    {
+      "id": "p6-measure",
+      "paperId": "p6",
+      "label": "Retention time",
+      "rawValue": "96 ms",
+      "value": 96,
+      "operator": "=",
+      "unit": "ms",
+      "normalizedValue": 0.096,
+      "normalizedUnit": "s",
+      "sample": "DRAM-B",
+      "evidenceIds": [
+        "p6-table"
+      ],
+      "conditions": [
+        {
+          "name": "Test temperature",
+          "rawValue": "125 °C",
+          "evidenceIds": [
+            "p6-table"
+          ]
+        },
+        {
+          "name": "Supply voltage",
+          "rawValue": "1.1 V",
+          "evidenceIds": [
+            "p6-table"
+          ]
+        },
+        {
+          "name": "Sample size",
+          "rawValue": "16 dies",
+          "evidenceIds": [
+            "p6-table"
+          ]
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "id": "r1",
+      "from": "p1-result",
+      "to": "p6-result",
+      "kind": "complements",
+      "comparisonStatus": "different-conditions",
+      "reason": "동일한 retention time 지표지만 test temperature(85 / 125 °C), 시료(DRAM-A / DRAM-B), sample size(32 / 16)가 다릅니다. 120 ms와 96 ms만으로 우열이나 주장 간 모순을 판단할 수 없습니다."
+    }
+  ]
+}

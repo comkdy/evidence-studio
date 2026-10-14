@@ -1,0 +1,59 @@
+[
+  {
+    "key": "platform",
+    "label": "메모리 종류",
+    "values": [
+      "DRAM",
+      "NAND",
+      "NOR Flash",
+      "SRAM",
+      "HBM",
+      "MRAM",
+      "RRAM",
+      "PCM",
+      "Ferroelectric Memory",
+      "Selector Memory",
+      "Logic"
+    ]
+  },
+  {
+    "key": "focus",
+    "label": "연구 초점",
+    "values": [
+      "Reliability",
+      "Performance",
+      "Scaling",
+      "Mechanism"
+    ]
+  },
+  {
+    "key": "layer",
+    "label": "연구 계층",
+    "values": [
+      "Device / Cell",
+      "Circuit / Array",
+      "Process / Integration",
+      "Packaging / Interconnect",
+      "Architecture / System",
+      "Material / Physics"
+    ]
+  },
+  {
+    "key": "application",
+    "label": "응용 방식",
+    "values": [
+      "CIM / PIM",
+      "Neuromorphic",
+      "CAM"
+    ]
+  },
+  {
+    "key": "method",
+    "label": "연구 방식",
+    "values": [
+      "Experiment",
+      "Simulation",
+      "Review"
+    ]
+  }
+]

@@ -1,0 +1,246 @@
+{
+  "version": 1,
+  "policy": "English technical terms in Korean explanations; verbatim source quotations.",
+  "terms": [
+    {
+      "id": "retention-time",
+      "preferredEn": "retention time",
+      "aliases": [
+        "보존 시간",
+        "데이터 보존 시간"
+      ],
+      "scope": "DRAM, NAND"
+    },
+    {
+      "id": "retention",
+      "preferredEn": "retention",
+      "aliases": [
+        "보존 특성",
+        "데이터 보존",
+        "보존"
+      ],
+      "scope": "DRAM, NAND"
+    },
+    {
+      "id": "refresh-interval",
+      "preferredEn": "refresh interval",
+      "aliases": [
+        "리프레시 간격",
+        "리프레시 주기"
+      ],
+      "scope": "DRAM"
+    },
+    {
+      "id": "refresh",
+      "preferredEn": "refresh",
+      "aliases": [
+        "리프레시"
+      ],
+      "scope": "DRAM"
+    },
+    {
+      "id": "endurance",
+      "preferredEn": "endurance",
+      "aliases": [
+        "내구성"
+      ],
+      "scope": "NAND"
+    },
+    {
+      "id": "program-erase",
+      "preferredEn": "program/erase",
+      "aliases": [
+        "프로그램·소거",
+        "프로그램/소거",
+        "program/erase",
+        "p/e"
+      ],
+      "scope": "NAND"
+    },
+    {
+      "id": "charge-trapping",
+      "preferredEn": "charge trapping",
+      "aliases": [
+        "전하 포획"
+      ],
+      "scope": "NAND"
+    },
+    {
+      "id": "bandwidth",
+      "preferredEn": "bandwidth",
+      "aliases": [
+        "대역폭"
+      ],
+      "scope": "HBM"
+    },
+    {
+      "id": "packaging",
+      "preferredEn": "packaging",
+      "aliases": [
+        "패키징"
+      ],
+      "scope": "HBM"
+    },
+    {
+      "id": "interconnect",
+      "preferredEn": "interconnect",
+      "aliases": [
+        "인터커넥트"
+      ],
+      "scope": "HBM"
+    },
+    {
+      "id": "reliability",
+      "preferredEn": "reliability",
+      "aliases": [
+        "신뢰성"
+      ],
+      "scope": "memory"
+    },
+    {
+      "id": "controller",
+      "preferredEn": "controller",
+      "aliases": [
+        "컨트롤러"
+      ],
+      "scope": "memory"
+    },
+    {
+      "id": "error-correction",
+      "preferredEn": "error correction",
+      "aliases": [
+        "오류 정정"
+      ],
+      "scope": "memory"
+    },
+    {
+      "id": "correction-latency",
+      "preferredEn": "correction latency",
+      "aliases": [
+        "정정 지연"
+      ],
+      "scope": "ECC"
+    },
+    {
+      "id": "supply-voltage",
+      "preferredEn": "supply voltage",
+      "aliases": [
+        "공급 전압",
+        "vdd"
+      ],
+      "scope": "measurement"
+    },
+    {
+      "id": "test-temperature",
+      "preferredEn": "test temperature",
+      "aliases": [
+        "시험 온도"
+      ],
+      "scope": "measurement"
+    },
+    {
+      "id": "ambient-temperature",
+      "preferredEn": "ambient temperature",
+      "aliases": [
+        "주변 온도"
+      ],
+      "scope": "measurement"
+    },
+    {
+      "id": "heat-spreading",
+      "preferredEn": "heat spreading",
+      "aliases": [
+        "열 확산"
+      ],
+      "scope": "HBM"
+    },
+    {
+      "id": "top-die",
+      "preferredEn": "top die",
+      "aliases": [
+        "상단 다이"
+      ],
+      "scope": "HBM"
+    },
+    {
+      "id": "cell-structure",
+      "preferredEn": "cell structure",
+      "aliases": [
+        "셀 구조"
+      ],
+      "scope": "memory"
+    },
+    {
+      "id": "cell-design",
+      "preferredEn": "cell design",
+      "aliases": [
+        "셀 설계"
+      ],
+      "scope": "memory"
+    },
+    {
+      "id": "degradation",
+      "preferredEn": "degradation",
+      "aliases": [
+        "열화"
+      ],
+      "scope": "memory"
+    },
+    {
+      "id": "single-bit-error",
+      "preferredEn": "single-bit error",
+      "aliases": [
+        "단일 비트 오류"
+      ],
+      "scope": "ECC"
+    },
+    {
+      "id": "sequential-traffic",
+      "preferredEn": "sequential traffic",
+      "aliases": [
+        "순차 접근"
+      ],
+      "scope": "measurement"
+    },
+    {
+      "id": "mixed-workloads",
+      "preferredEn": "mixed workloads",
+      "aliases": [
+        "혼합 워크로드"
+      ],
+      "scope": "measurement"
+    },
+    {
+      "id": "thermal-conditions",
+      "preferredEn": "thermal conditions",
+      "aliases": [
+        "열 조건"
+      ],
+      "scope": "HBM"
+    },
+    {
+      "id": "stack-structure",
+      "preferredEn": "stack structure",
+      "aliases": [
+        "적층 구조"
+      ],
+      "scope": "HBM"
+    },
+    {
+      "id": "nand",
+      "preferredEn": "NAND",
+      "aliases": [
+        "낸드"
+      ],
+      "scope": "memory"
+    },
+    {
+      "id": "flash",
+      "preferredEn": "flash",
+      "aliases": [
+        "플래시"
+      ],
+      "scope": "memory"
+    }
+  ]
+}
