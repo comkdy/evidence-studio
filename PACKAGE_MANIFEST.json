@@ -1,6 +1,6 @@
 {
   "app": "Evidence Studio",
-  "release": "github-wiki-job-usage-2026-10-14",
+  "release": "github-diagnostics-2026-10-15",
   "database": "Absent; schema and baseline settings initialize on first launch.",
   "wiki": "Empty; documents are regenerated after ingest.",
   "raw_pdf_count": 0,
@@ -35,8 +35,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 5169,
-      "sha256": "7252a5d610a552405c4254eabfb8a1e814debf46d635786582a62ae2d1b807a4"
+      "bytes": 5268,
+      "sha256": "ba84bd44116839a0f8aa30aeb68629920dc69da3eacc33d068bcf6d0e18012bf"
     },
     {
       "path": "backend/__init__.py",
@@ -82,6 +82,26 @@
       "path": "backend/conversation_context.py",
       "bytes": 1385,
       "sha256": "efe05428762fac460b0e5270cfb377d312eb9e4089f6542ca8ca8bcf547913f6"
+    },
+    {
+      "path": "backend/diagnostic_report.py",
+      "bytes": 6446,
+      "sha256": "ee4797981890a566a224c54ebc7e5fa950b5d7ec236ac168672f4374c76ef07c"
+    },
+    {
+      "path": "backend/diagnostic_safety.py",
+      "bytes": 5441,
+      "sha256": "9a16adf6f091848eaa65daa01eadf113254e2f8f2aa7182259c7b0ef5d849f56"
+    },
+    {
+      "path": "backend/diagnostic_steps.py",
+      "bytes": 19273,
+      "sha256": "9b46d286281688df5fd80390d0a49a6e2998ee7ac8f09d3b05c50282206d7261"
+    },
+    {
+      "path": "backend/diagnostics.py",
+      "bytes": 12302,
+      "sha256": "b843541cd2f72d011a52c525caea63f3366680cdb620d08440554cc09ae98951"
     },
     {
       "path": "backend/embedding_adapter.py",
@@ -337,6 +357,11 @@
       "path": "docs/DATABASE_PLAN.md",
       "bytes": 5557,
       "sha256": "b1af18965bb1689422391893542c67af88a863e36028f63d16a90752edd35ac0"
+    },
+    {
+      "path": "docs/DIAGNOSTICS.md",
+      "bytes": 9259,
+      "sha256": "0114ce5e90c90a4921b359fe1e41e3e0de1427e8071a887a5abe5469f3fb2157"
     },
     {
       "path": "docs/EXPERT_KNOWLEDGE_PLAN.md",
@@ -674,6 +699,11 @@
       "sha256": "53c542d5a7599ae9c75cab2194a37d898843352ed3c0bd34e0bcd0290cd812a2"
     },
     {
+      "path": "tests/test_diagnostics.py",
+      "bytes": 11866,
+      "sha256": "079a2bcc138459fcef899bd83e28b05b613a5296c867d210c7fedeec034c8892"
+    },
+    {
       "path": "tests/test_expert_knowledge_inventory.py",
       "bytes": 8667,
       "sha256": "62f7a27f445e8d33239126daf57a1c9b4471bef8d9f2969424597be2e6bf831c"
@@ -788,16 +818,18 @@
   "visibility": "private",
   "bootstrap_admin": "Read BOOTSTRAP_ADMIN_EMPLOYEE_ID from the untracked .env; local-only demo identity when unset.",
   "validation": {
-    "backend_tests": 280,
+    "backend_tests": 291,
     "frontend_tests": 19,
-    "frontend_build": "TypeScript check and Vite production build passed",
+    "frontend_build": "Unchanged from verified TypeScript/Vite build; this release only adds CLI diagnostics and documentation.",
     "external_model_calls": false,
     "conversation_browser_check": "isolated synthetic data and deterministic test model",
     "database_concurrency_tests": 14,
-    "test_detail": "Full backend suite: 280 passing, including 12 Wiki usage tests; frontend: 19 passing. Usage tests cover both model roles, timeout/invalid JSON, missing token reports, database contention, restart, and real Wiki orchestration with fake responses.",
+    "test_detail": "291 backend tests passed inside the isolated diagnostic runner, including 11 new diagnostic tests. Default ingest/curation/chunking checks passed. Live-protocol checks used only a local fake HTTP provider for LLM/light LLM, embedding, reranker, semantic chunking, Wiki lifecycle and answer workflow.",
     "slow_inference_tests": 16,
     "adaptive_wiki_tests": 19,
     "wiki_usage_tests": 12,
-    "wiki_usage_browser_check": "Isolated synthetic DB: live usage, model details, partial/missing tokens, no-call jobs, and legacy history; no browser console errors."
+    "wiki_usage_browser_check": "Isolated synthetic DB: live usage, model details, partial/missing tokens, no-call jobs, and legacy history; no browser console errors.",
+    "diagnostic_runner_tests": 11,
+    "diagnostic_report_validation": "HTML structure, escaping, missing usage and offline dependencies verified; rendered preview unavailable because browser policy blocks file URLs."
   }
 }
