@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from uuid import uuid4
 from functools import lru_cache
-from .pilot_db import ROOT, DEFAULT_DB, connect, db_path, now
+from .pilot_db import write_connection, ROOT, DEFAULT_DB, connect, db_path, now
 
 
 class WikiError(ValueError):
@@ -117,8 +117,7 @@ class WikiStore:
         atomic_write(safe_path(self.root, history), text)
         replaced=False
         try:
-            with connect(self.database) as db:
-                db.execute('BEGIN IMMEDIATE')
+            with write_connection(self.database) as db:
                 current = db.execute('SELECT content_hash FROM wiki_files WHERE id=?', (page_id,)).fetchone()
                 if (current['content_hash'] if current else None) != (old['content_hash'] if old else None):
                     raise WikiError('다른 작업이 Wiki를 갱신했습니다. 다시 시도하세요.')

@@ -289,6 +289,7 @@ class SemanticIntegrationTests(unittest.TestCase):
             self.assertEqual(len(client.calls[0]), 2)
             CachedEmbedder(db, config(), client).embed(["Retention", "NAND"])
             self.assertEqual(len(client.calls), 1)
+            db.commit()  # New model requests must not run inside the previous cache write.
             CachedEmbedder(db, config(revision="v2"), client).embed(["Retention", "NAND"])
             self.assertEqual(len(client.calls), 2)
             self.assertEqual(db.execute("SELECT count(*) FROM chunk_embedding_cache").fetchone()[0], 4)

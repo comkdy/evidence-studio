@@ -1,11 +1,12 @@
 """Local folder watcher and a small, durable user-facing processing ledger."""
 import json
+import sqlite3
 import threading
 import time
 from datetime import datetime,timezone
 from pathlib import Path
 from fastapi import APIRouter
-from .pilot_db import ROOT,DEFAULT_DB,connect,now
+from .pilot_db import ROOT,DEFAULT_DB,connect,now,write_connection,is_database_busy
 
 SCAN_SECONDS=60
 STABLE_SECONDS=5
@@ -21,7 +22,7 @@ def record_expert_creation(db,expert_id,name,job_id):
 
 def update_task(database,task_id,**values):
     values['updated_at']=now()
-    with connect(database) as db:
+    with write_connection(database) as db:
         db.execute('UPDATE processing_tasks SET '+','.join(k+'=?' for k in values)+' WHERE id=?',(*values.values(),task_id))
         db.commit()
 
@@ -72,29 +73,52 @@ class RawScanner:
                 db.commit()
 
 
+class TaskUpdateDeferred(Exception):
+    """Keep only the ledger update pending; never repeat a completed ingest."""
+    def __init__(self, task_id, values):
+        self.task_id, self.values = task_id, values
+
+
 def process_next(database):
     from .pilot_ingest import ingest_file
-    with connect(database) as db:
-        db.execute('BEGIN IMMEDIATE')
-        row=db.execute("SELECT * FROM processing_tasks WHERE kind='paper' AND state='queued' ORDER BY id LIMIT 1").fetchone()
-        if not row:return False
-        task=dict(row)
-        db.execute("UPDATE processing_tasks SET state='running',stage='논문 처리 시작',updated_at=? WHERE id=?",(now(),task['id']))
-        db.commit()
     try:
-        result=ingest_file(task['target'],database,STABLE_SECONDS,
-                           progress=lambda stage:update_task(database,task['id'],stage=stage))
+        with write_connection(database) as db:
+            row=db.execute("SELECT * FROM processing_tasks WHERE kind='paper' AND state='queued' ORDER BY id LIMIT 1").fetchone()
+            if not row:return False
+            task=dict(row)
+            db.execute("UPDATE processing_tasks SET state='running',stage='논문 처리 시작',updated_at=? WHERE id=?",(now(),task['id']))
+    except sqlite3.OperationalError as error:
+        if not is_database_busy(error):raise
+        return False
+
+    def progress(stage):
+        try:update_task(database,task['id'],stage=stage)
+        except sqlite3.OperationalError as error:
+            if not is_database_busy(error):raise
+
+    retry=False
+    try:
+        result=ingest_file(task['target'],database,STABLE_SECONDS,progress=progress)
         state=result['status']
         if state=='deferred':
-            update_task(database,task['id'],state='stabilizing',stage='파일 수신 중',detail='')
+            values=dict(state='stabilizing',stage='파일 수신 중',detail='')
         elif state=='failed' or not result.get('paper_id'):
-            update_task(database,task['id'],state='failed',stage='논문 확인 필요',detail=result['detail'])
+            values=dict(state='failed',stage='논문 확인 필요',detail=result['detail'])
         else:
-            update_task(database,task['id'],state='db_ready',stage='Wiki 구성 대기',detail='',
+            values=dict(state='db_ready',stage='Wiki 구성 대기',detail='',
                         paper_id=result['paper_id'],wiki_job_id=result.get('wiki_job_id'),needs_review=int(state in ('partial','needs_review')))
-    except Exception:
-        update_task(database,task['id'],state='failed',stage='논문 처리 중단',detail='파일을 읽지 못했습니다. 파일 접근 권한과 PDF 형식을 확인해 주세요.')
-    return True
+    except Exception as error:
+        if is_database_busy(error):
+            retry=True
+            values=dict(state='queued',stage='DB 저장 대기',detail='DB가 사용 중입니다. 잠시 후 자동 재시도합니다.')
+        else:
+            values=dict(state='failed',stage='논문 처리 중단',detail='파일을 읽지 못했습니다. 파일 접근 권한과 PDF 형식을 확인해 주세요.')
+    try:update_task(database,task['id'],**values)
+    except sqlite3.OperationalError as error:
+        if not is_database_busy(error):raise
+        raise TaskUpdateDeferred(task['id'],values) from error
+    return not retry
+
 
 
 def start_ingestion_workers(stop,database):
@@ -111,9 +135,15 @@ def start_ingestion_workers(stop,database):
                 logging.getLogger(__name__).error('Folder monitor failed; will retry.')
             if stop.wait(SCAN_SECONDS):break
     def ingest_loop():
+        pending=None
         while not stop.is_set():
             try:
-                if process_next(database):continue
+                if pending:
+                    update_task(database,pending.task_id,**pending.values)
+                    pending=None
+                elif process_next(database):continue
+            except TaskUpdateDeferred as deferred:
+                pending=deferred
             except Exception:
                 import logging
                 logging.getLogger(__name__).error('Document worker failed; will retry.')
@@ -148,7 +178,7 @@ def processing_status(database=None):
                 job=max(retries,key=lambda j:j['id']);linked.add(job['id'])
         if state=='db_ready':
             if job and job['state'] in ('queued','running','failed'):
-                state=job['state'];stage={'queued':'Wiki 구성 대기','running':'Wiki 구성 중','failed':'Wiki 구성 문제'}[state];detail=job['error'] if state=='failed' else ''
+                state=job['state'];stage={'queued':'Wiki 구성 대기','running':'Wiki 구성 중','failed':'Wiki 구성 문제'}[state];detail=job['error'] if state in ('failed','queued') else ''
             else:
                 state='completed';stage='DB·Wiki 반영 완료'
                 if task['paper_id'] in waiting_papers or task['kind']=='expert' and task['target'] in waiting_experts:
@@ -165,7 +195,7 @@ def processing_status(database=None):
         state='completed' if job['state']=='done' else job['state']
         entries.append(dict(id='wiki-'+str(job['id']),kind='wiki',label=label,state=state,
                             stage={'queued':'Wiki 반영 대기','running':'Wiki 반영 중','failed':'Wiki 반영 문제','completed':'변경사항 확인·반영 완료'}[state],
-                            detail=job['error'] if state=='failed' else '',paper_id=None,expert_id=job['expert_id'] or None,updated_at=job['finished_at'] or job['created_at']))
+                            detail=job['error'] if state in ('failed','queued') else '',paper_id=None,expert_id=job['expert_id'] or None,updated_at=job['finished_at'] or job['created_at']))
     entries.sort(key=lambda e:e['updated_at'],reverse=True)
     # Old failures superseded by successful retries remain in history, not alerts.
     seen=set()

@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from .auth import current_user, has_permission, require_permission
 from .pilot_db import connect, now
-from .chunking import reindex_document, load_chunk_policy
+from .chunking import reindex_document, load_chunk_policy, prepare_document_index, validate_prepared_input, IndexInputsChanged
 from .wiki_engine import enqueue
 
 router=APIRouter(prefix='/api/pilot',tags=['Source review'])
@@ -98,7 +98,23 @@ def validate_change(db,page,action,text):
     return text
 
 
-def apply_change(db,page,request,reviewer_id):
+def prepare_review_index(db,page,request):
+    if revision(db,page)!=request['revision']:
+        raise HTTPException(409,'다른 사용자가 이 페이지를 수정했습니다. 최신 내용을 다시 열어 주세요.')
+    text=validate_change(db,page,request['action'],request['proposed_text'])
+    state='excluded' if request['action']=='exclude' else 'needs_review' if request['action']=='reopen' else 'ready'
+    if request['action'] in ('exclude','reopen'):text=page['text']
+    try:
+        return prepare_document_index(db,page['run_id'],load_chunk_policy(),
+                                      page_updates={page['id']:{'text':text,'status':state}})
+    except Exception as error:
+        raise HTTPException(503,'검색 준비에 실패해 변경사항을 저장하지 않았습니다. 검색 서비스 연결을 확인한 뒤 다시 시도해 주세요.') from error
+
+
+def apply_change(db,page,request,reviewer_id,prepared):
+    try:validate_prepared_input(db,prepared)
+    except IndexInputsChanged as error:
+        raise HTTPException(409,'검색 준비 중 문서가 변경되었습니다. 최신 내용을 다시 열어 검토해 주세요.') from error
     if revision(db,page)!=request['revision']:
         raise HTTPException(409,'다른 사용자가 이 페이지를 수정했습니다. 최신 내용을 다시 열어 검토해 주세요.')
     action=request['action'];text=validate_change(db,page,action,request['proposed_text'])
@@ -119,7 +135,7 @@ def apply_change(db,page,request,reviewer_id):
     usable=db.execute("SELECT count(*) FROM pages WHERE run_id=? AND status IN ('ready','excluded')",(page['run_id'],)).fetchone()[0]
     db.execute('UPDATE extraction_runs SET status=? WHERE id=?',('partial' if pending and usable else 'needs_review' if pending else 'ready',page['run_id']))
     # Index and review history commit together. API/embedding failures roll everything back.
-    try:reindex_document(db,page['run_id'],load_chunk_policy())
+    try:reindex_document(db,page['run_id'],prepared['policy'],prepared=prepared)
     except Exception as error:
         raise HTTPException(503,'검색 반영에 실패해 변경사항을 저장하지 않았습니다. 검색 서비스 연결을 확인한 뒤 다시 시도해 주세요.') from error
     job_id=enqueue(db,'Reviewed source page updated')
@@ -135,22 +151,30 @@ def submit_review(page_id:str,draft:ReviewInput):
     if not draft.confirmed:raise HTTPException(422,'원본 PDF의 해당 페이지를 확인한 뒤 체크해 주세요.')
     reason=draft.reason.strip()
     if len(reason)<3:raise HTTPException(422,'수정 또는 제외 사유를 적어 주세요.')
-    with connect() as db:
-        db.execute('BEGIN IMMEDIATE')
+    can_apply=has_permission('manage_knowledge')
+    request={'id':str(draft.request_id),'page_id':page_id,'revision':draft.revision,'action':draft.action,
+             'proposed_text':draft.text,'reason':reason}
+    def check(db):
         page=current_page(db,page_id)
         old=db.execute('SELECT * FROM page_review_requests WHERE id=?',(str(draft.request_id),)).fetchone()
         if old:
             expected=(page_id,draft.revision,draft.action,draft.text,reason,user['employee_id'])
             if tuple(old[k] for k in ('page_id','revision','action','proposed_text','reason','actor_id'))!=expected:
                 raise HTTPException(409,'이미 사용한 저장 요청입니다. 최신 화면에서 다시 시도해 주세요.')
-            return {'id':old['id'],'state':old['state']}
+            return page,{'id':old['id'],'state':old['state']}
         if revision(db,page)!=draft.revision:raise HTTPException(409,'다른 사용자가 이 페이지를 수정했습니다. 최신 내용을 다시 열어 주세요.')
         validate_change(db,page,draft.action,draft.text)
-        request={'id':str(draft.request_id),'page_id':page_id,'revision':draft.revision,'action':draft.action,
-                 'proposed_text':draft.text,'reason':reason}
-        db.execute('''INSERT INTO page_review_requests(id,page_id,revision,action,proposed_text,reason,actor_id,state,created_at)
-                      VALUES(?,?,?,?,?,?,?,'pending',?)''',(*request.values(),user['employee_id'],now()))
-        job_id=apply_change(db,page,request,user['employee_id']) if has_permission('manage_knowledge') else None
+        return page,None
+    with connect() as db:
+        page,old=check(db)
+        if old:return old
+        prepared=prepare_review_index(db,page,request) if can_apply else None
+        db.execute('BEGIN IMMEDIATE')
+        page,old=check(db)
+        if old:return old
+        db.execute("""INSERT INTO page_review_requests(id,page_id,revision,action,proposed_text,reason,actor_id,state,created_at)
+                      VALUES(?,?,?,?,?,?,?,'pending',?)""",(*request.values(),user['employee_id'],now()))
+        job_id=apply_change(db,page,request,user['employee_id'],prepared) if can_apply else None
         db.commit()
         return {'id':request['id'],'state':'applied' if job_id else 'pending','wiki_job_id':job_id}
 
@@ -158,19 +182,26 @@ def submit_review(page_id:str,draft:ReviewInput):
 @router.post('/page-review-requests/{request_id}/decision')
 def decide_review(request_id:str,draft:ReviewDecision):
     user=require_permission('manage_knowledge')
-    with connect() as db:
-        db.execute('BEGIN IMMEDIATE')
+    def check(db):
         row=db.execute('SELECT * FROM page_review_requests WHERE id=?',(request_id,)).fetchone()
         if not row:raise HTTPException(404,'검토 요청을 찾을 수 없습니다.')
         if row['state']!='pending':raise HTTPException(409,'이미 처리한 요청입니다. 최신 내용을 확인해 주세요.')
         if draft.action=='reject':
             if len(draft.note.strip())<3:raise HTTPException(422,'반영하지 않는 이유를 적어 주세요.')
+            return dict(row),None
+        if not draft.confirmed:raise HTTPException(422,'제안된 텍스트와 원본을 대조해 주세요.')
+        page=current_page(db,row['page_id'])
+        if draft.revision!=revision(db,page):raise HTTPException(409,'최신 내용을 다시 확인해 주세요.')
+        return dict(row),page
+    with connect() as db:
+        row,page=check(db)
+        prepared=prepare_review_index(db,page,row) if page else None
+        db.execute('BEGIN IMMEDIATE')
+        row,page=check(db)
+        if draft.action=='reject':
             db.execute("UPDATE page_review_requests SET state='rejected',decision_note=?,reviewer_id=?,decided_at=? WHERE id=?",(draft.note.strip(),user['employee_id'],now(),request_id))
             job_id=None
         else:
-            if not draft.confirmed:raise HTTPException(422,'제안된 텍스트와 원본을 대조해 주세요.')
-            page=current_page(db,row['page_id'])
-            if draft.revision!=revision(db,page):raise HTTPException(409,'최신 내용을 다시 확인해 주세요.')
-            job_id=apply_change(db,page,dict(row),user['employee_id'])
+            job_id=apply_change(db,page,row,user['employee_id'],prepared)
         db.commit()
         return {'state':'applied' if draft.action=='apply' else 'rejected','wiki_job_id':job_id}

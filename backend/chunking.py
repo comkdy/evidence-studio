@@ -229,49 +229,128 @@ def build_chunks(pages, paper_title, policy, embedder=None, diagnostics=None):
     return result
 
 
-def reindex_document(db, run_id, policy):
-    doc = db.execute("""SELECT p.title FROM paper_documents d JOIN papers p ON p.id=d.paper_id
-                        WHERE d.current_run_id=?""", (run_id,)).fetchone()
-    if not doc:
-        raise ValueError("Only the current extraction can be indexed")
-    pages = [dict(p) for p in db.execute("SELECT * FROM pages WHERE run_id=? ORDER BY page_number", (run_id,))]
+class IndexInputsChanged(ValueError):
+    """The source changed while an index was being prepared."""
+
+
+def index_fingerprint(title, pages, policy):
     metadata = json.dumps(policy.metadata(), sort_keys=True)
-    fingerprint = hashlib.sha256((metadata + doc["title"] + json.dumps([(p["id"], p["status"], p["text"]) for p in pages])).encode()).hexdigest()
-    current = db.execute("SELECT fingerprint FROM search_index_state WHERE run_id=?", (run_id,)).fetchone()
-    if current and current[0] == fingerprint:
-        return {"status": "unchanged", "chunks": db.execute("SELECT count(*) FROM search_chunk_details WHERE run_id=?", (run_id,)).fetchone()[0]}
-    # Cache and index share a savepoint. Failure never publishes a partial index or a structural fallback.
-    db.execute("SAVEPOINT chunk_reindex")
+    return hashlib.sha256((metadata + title + json.dumps([(p["id"], p["status"], p["text"]) for p in pages])).encode()).hexdigest()
+
+
+def index_inputs(db, run_id):
+    # A short read snapshot ends before any API work. Never retain a WAL snapshot
+    # and later try to upgrade it to a writer.
+    owned = not db.in_transaction
+    if owned:
+        db.execute("BEGIN")
     try:
-        diagnostics = []
-        embedder = CachedEmbedder(db, policy.embedding) if policy.mode == "semantic" else None
-        groups = build_chunks(pages, doc["title"], policy, embedder, diagnostics)
-        old = "SELECT c.id FROM search_chunks c JOIN pages p ON p.id=c.page_id WHERE p.run_id=?"
-        db.execute("DELETE FROM chunk_fts WHERE chunk_id IN (" + old + ")", (run_id,))
-        db.execute("DELETE FROM search_chunks WHERE id IN (" + old + ")", (run_id,))
-        db.execute("DELETE FROM search_contexts WHERE run_id=?", (run_id,))
-        count = 0
-        for i, group in enumerate(groups):
-            parent_id = "context-" + hashlib.sha256((run_id + fingerprint + str(i)).encode()).hexdigest()[:24]
-            db.execute("INSERT INTO search_contexts VALUES(?,?,?,?,?)", (parent_id, run_id, group["section"], group["text"], json.dumps(group["spans"])))
-            for child in group["children"]:
-                chunk_id = "chunk-" + hashlib.sha256((parent_id + str(count) + child["text"]).encode()).hexdigest()[:24]
-                first = child["spans"][0]
-                db.execute("INSERT INTO search_chunks VALUES(?,?,?,?,?)", (chunk_id, first["page_id"], first["start_offset"], first["end_offset"], child["text"]))
-                db.execute("INSERT INTO search_chunk_details VALUES(?,?,?,?,?,?)", (chunk_id, run_id, parent_id, count, group["section"], child["context_text"]))
-                for n, span in enumerate(child["spans"]):
-                    db.execute("INSERT INTO search_chunk_spans VALUES(?,?,?,?,?,?,?,?)", (chunk_id, n, span["page_id"], span["start_offset"], span["end_offset"], span["chunk_start"], span["chunk_end"], span["page_number"]))
-                db.execute("INSERT INTO chunk_fts(chunk_id,title,body) VALUES(?,?,?)", (chunk_id, doc["title"], group["section"] + "\n" + child["text"]))
-                count += 1
-        db.execute("INSERT INTO search_index_state VALUES(?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET fingerprint=excluded.fingerprint,policy_json=excluded.policy_json,indexed_at=excluded.indexed_at", (run_id, fingerprint, metadata, now()))
-        db.execute("DELETE FROM search_semantic_audits WHERE run_id=?", (run_id,))
-        if embedder:
-            audit = {"algorithm": SEMANTIC_VERSION, "cache_hits": embedder.cache_hits,
-                     "new_vectors": embedder.new_vectors, "sections": diagnostics}
-            db.execute("INSERT INTO search_semantic_audits VALUES(?,?,?)", (run_id, json.dumps(audit), now()))
+        doc = db.execute("""SELECT p.title FROM paper_documents d JOIN papers p ON p.id=d.paper_id
+                            WHERE d.current_run_id=?""", (run_id,)).fetchone()
+        if not doc:
+            raise IndexInputsChanged("Only the current extraction can be indexed")
+        pages = [dict(p) for p in db.execute("SELECT * FROM pages WHERE run_id=? ORDER BY page_number", (run_id,))]
+        return doc["title"], pages
+    finally:
+        if owned:
+            db.rollback()
+
+
+def prepare_index(db, run_id, title, pages, policy):
+    """Compute from detached source data, without writing cache or holding a transaction."""
+    fingerprint = index_fingerprint(title, pages, policy)
+    current = db.execute("SELECT fingerprint FROM search_index_state WHERE run_id=?", (run_id,)).fetchone()
+    prepared = dict(run_id=run_id, title=title, policy=policy, fingerprint=fingerprint,
+                    metadata=json.dumps(policy.metadata(), sort_keys=True), groups=None,
+                    diagnostics=[], embedder=None)
+    if current and current[0] == fingerprint:
+        return prepared
+    if policy.mode == "semantic" and db.in_transaction:
+        raise ValueError("Prepare semantic indexing before opening a write transaction")
+    embedder = CachedEmbedder(db, policy.embedding, buffered=True) if policy.mode == "semantic" else None
+    prepared["groups"] = build_chunks(pages, title, policy, embedder, prepared["diagnostics"])
+    prepared["embedder"] = embedder
+    return prepared
+
+
+def prepare_document_index(db, run_id, policy, *, title=None, page_updates=None):
+    original_title, pages = index_inputs(db, run_id)
+    source_fingerprint = index_fingerprint(original_title, pages, policy)
+    target_pages = [p | (page_updates or {}).get(p["id"], {}) for p in pages]
+    prepared = prepare_index(db, run_id, original_title if title is None else title, target_pages, policy)
+    prepared["source_fingerprint"] = source_fingerprint
+    return prepared
+
+
+def validate_prepared_input(db, prepared):
+    title, pages = index_inputs(db, prepared["run_id"])
+    if index_fingerprint(title, pages, prepared["policy"]) != prepared["source_fingerprint"]:
+        raise IndexInputsChanged("Document changed during index preparation; retry using its latest contents")
+
+
+def reindex_document(db, run_id, policy, *, prepared=None):
+    prepared = prepared or prepare_document_index(db, run_id, policy)
+    if prepared["run_id"] != run_id or prepared["policy"] != policy:
+        raise ValueError("Prepared index does not match the requested document or policy")
+    owned = not db.in_transaction
+    if owned:
+        db.execute("BEGIN IMMEDIATE")
+    savepoint_open = False
+    try:
+        db.execute("SAVEPOINT chunk_reindex")
+        savepoint_open = True
+        title, pages = index_inputs(db, run_id)
+        fingerprint = prepared["fingerprint"]
+        if index_fingerprint(title, pages, policy) != fingerprint:
+            raise IndexInputsChanged("Document changed during index preparation; retry using its latest contents")
+        current = db.execute("SELECT fingerprint FROM search_index_state WHERE run_id=?", (run_id,)).fetchone()
+        if current and current[0] == fingerprint:
+            result = {"status": "unchanged", "chunks": db.execute("SELECT count(*) FROM search_chunk_details WHERE run_id=?", (run_id,)).fetchone()[0]}
+        else:
+            result = publish_index(db, run_id, prepared)
         db.execute("RELEASE chunk_reindex")
+        savepoint_open = False
+        if owned:
+            db.commit()
+        return result
     except Exception:
-        db.execute("ROLLBACK TO chunk_reindex")
-        db.execute("RELEASE chunk_reindex")
+        if savepoint_open and db.in_transaction:
+            db.execute("ROLLBACK TO chunk_reindex")
+            db.execute("RELEASE chunk_reindex")
+        if owned:
+            db.rollback()
         raise
+
+
+def publish_index(db, run_id, prepared):
+    groups, embedder = prepared["groups"], prepared["embedder"]
+    fingerprint, metadata = prepared["fingerprint"], prepared["metadata"]
+    diagnostics = prepared["diagnostics"]
+    if groups is None:
+        raise IndexInputsChanged("Search index changed during preparation; retry")
+    if embedder:
+        embedder.flush(db)
+    old = "SELECT c.id FROM search_chunks c JOIN pages p ON p.id=c.page_id WHERE p.run_id=?"
+    db.execute("DELETE FROM chunk_fts WHERE chunk_id IN (" + old + ")", (run_id,))
+    db.execute("DELETE FROM search_chunks WHERE id IN (" + old + ")", (run_id,))
+    db.execute("DELETE FROM search_contexts WHERE run_id=?", (run_id,))
+    count = 0
+    for i, group in enumerate(groups):
+        parent_id = "context-" + hashlib.sha256((run_id + fingerprint + str(i)).encode()).hexdigest()[:24]
+        db.execute("INSERT INTO search_contexts VALUES(?,?,?,?,?)", (parent_id, run_id, group["section"], group["text"], json.dumps(group["spans"])))
+        for child in group["children"]:
+            chunk_id = "chunk-" + hashlib.sha256((parent_id + str(count) + child["text"]).encode()).hexdigest()[:24]
+            first = child["spans"][0]
+            db.execute("INSERT INTO search_chunks VALUES(?,?,?,?,?)", (chunk_id, first["page_id"], first["start_offset"], first["end_offset"], child["text"]))
+            db.execute("INSERT INTO search_chunk_details VALUES(?,?,?,?,?,?)", (chunk_id, run_id, parent_id, count, group["section"], child["context_text"]))
+            for n, span in enumerate(child["spans"]):
+                db.execute("INSERT INTO search_chunk_spans VALUES(?,?,?,?,?,?,?,?)", (chunk_id, n, span["page_id"], span["start_offset"], span["end_offset"], span["chunk_start"], span["chunk_end"], span["page_number"]))
+            db.execute("INSERT INTO chunk_fts(chunk_id,title,body) VALUES(?,?,?)", (chunk_id, prepared["title"], group["section"] + "\n" + child["text"]))
+            count += 1
+    db.execute("INSERT INTO search_index_state VALUES(?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET fingerprint=excluded.fingerprint,policy_json=excluded.policy_json,indexed_at=excluded.indexed_at", (run_id, fingerprint, metadata, now()))
+    db.execute("DELETE FROM search_semantic_audits WHERE run_id=?", (run_id,))
+    if embedder:
+        audit = {"algorithm": SEMANTIC_VERSION, "cache_hits": embedder.cache_hits,
+                 "new_vectors": embedder.new_vectors, "sections": diagnostics}
+        db.execute("INSERT INTO search_semantic_audits VALUES(?,?,?)", (run_id, json.dumps(audit), now()))
     return {"status": "indexed", "chunks": count, "contexts": len(groups)}

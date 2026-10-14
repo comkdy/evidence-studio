@@ -179,9 +179,10 @@ class EmbeddingClient:
 
 
 class CachedEmbedder:
-    """Caller owns the transaction; cache writes roll back with a failed index build."""
-    def __init__(self, db, config, client=None):
+    """Buffered builds read cache only; publish new vectors with the finished index."""
+    def __init__(self, db, config, client=None, *, buffered=False):
         self.db, self.config = db, config
+        self.buffered, self.pending = buffered, {}
         self.client = client or EmbeddingClient(config)
         self.identity = hashlib.sha256(json.dumps(config.identity(), sort_keys=True).encode()).hexdigest()
         self.cache_hits, self.new_vectors = 0, 0
@@ -194,6 +195,10 @@ class CachedEmbedder:
         known, missing = {}, {}
         for key, digest, text in zip(keys, hashes, texts):
             if key in known or key in missing:
+                continue
+            if key in self.pending:
+                known[key] = json.loads(self.pending[key][3])
+                self.cache_hits += 1
                 continue
             row = self.db.execute("SELECT vector_json FROM chunk_embedding_cache WHERE cache_key=?", (key,)).fetchone()
             if row:
@@ -208,10 +213,24 @@ class CachedEmbedder:
             else:
                 missing[key] = (digest, text)
         if missing:
+            if self.db.in_transaction:
+                raise EmbeddingError("Embedding preparation requires a connection without an open transaction")
             vectors = validate_vectors(self.client.embed([v[1] for v in missing.values()]), len(missing), self.dimensions)
             self.dimensions = len(vectors[0])
             for (key, (digest, _)), vector in zip(missing.items(), vectors):
                 known[key] = vector
-                self.db.execute("INSERT INTO chunk_embedding_cache VALUES(?,?,?,?,?,?)", (key, self.identity, digest, json.dumps(vector), self.dimensions, now()))
+                row = (key, self.identity, digest, json.dumps(vector), self.dimensions, now())
+                if self.buffered:
+                    self.pending[key] = row
+                else:
+                    self.db.execute("INSERT OR IGNORE INTO chunk_embedding_cache VALUES(?,?,?,?,?,?)", row)
                 self.new_vectors += 1
         return [known[key] for key in keys]
+
+
+    def flush(self, db):
+        """No network here. Caller includes cache and index in one short transaction."""
+        dimensions = db.execute("SELECT DISTINCT dimensions FROM chunk_embedding_cache WHERE model_fingerprint=?", (self.identity,)).fetchall()
+        if any(row[0] != self.dimensions for row in dimensions):
+            raise EmbeddingError("Embedding dimensions changed during index preparation")
+        db.executemany("INSERT OR IGNORE INTO chunk_embedding_cache VALUES(?,?,?,?,?,?)", self.pending.values())

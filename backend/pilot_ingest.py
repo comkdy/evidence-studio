@@ -9,10 +9,10 @@ import time
 import uuid
 from pathlib import Path
 from pypdf import PdfReader
-from .pilot_db import ROOT, connect, initialize, now
+from .pilot_db import ROOT, connect, initialize, now, is_database_busy
 from .report_metadata import extract_title, extract_abstract, has_text_encoding_problem
 from .expert_config import refresh_expert_policies
-from .chunking import load_chunk_policy, reindex_document
+from .chunking import load_chunk_policy, reindex_document, prepare_index
 
 PARSER_VERSION = "pypdf-6.10.0-text-v1"
 TOPICS = {
@@ -60,16 +60,26 @@ def ingest_file(path, db_path=None, stable_seconds=5, progress=lambda stage:None
         current_stat=path.stat()
         if (stat.st_size,stat.st_mtime_ns)!=(current_stat.st_size,current_stat.st_mtime_ns):
             return job("deferred","검사 중 파일이 변경되었습니다.",digest)
-        prior=db.execute("SELECT d.sha256 FROM document_sources s JOIN paper_documents d ON d.id=s.document_id WHERE s.path=?",(str(path),)).fetchone()
-        if prior and prior["sha256"]!=digest:
-            return job("needs_review","같은 경로의 내용이 변경되었습니다. 기존 문서와 근거를 유지합니다.",digest)
-        document=db.execute("SELECT * FROM paper_documents WHERE sha256=?",(digest,)).fetchone()
-        if document:
-            paper_id=document['paper_id']
-            from .wiki_engine import enqueue
-            wiki_job_id=enqueue(db,'duplicate source linked')
-            db.execute("INSERT INTO document_sources VALUES(?,?,?,?,?) ON CONFLICT(path) DO UPDATE SET last_seen_at=excluded.last_seen_at",(str(path),document["id"],filename,now(),now()))
-            return job("unchanged","같은 SHA-256의 문서를 재사용했습니다.",digest)
+        def reuse_existing():
+            nonlocal paper_id, wiki_job_id
+            prior=db.execute("SELECT d.sha256 FROM document_sources s JOIN paper_documents d ON d.id=s.document_id WHERE s.path=?",(str(path),)).fetchone()
+            if prior and prior["sha256"]!=digest:
+                paper_id=None; wiki_job_id=None
+                return job("needs_review","같은 경로의 내용이 변경되었습니다. 기존 문서와 근거를 유지합니다.",digest)
+            document=db.execute("SELECT * FROM paper_documents WHERE sha256=?",(digest,)).fetchone()
+            if document:
+                paper_id=document['paper_id']
+                from .wiki_engine import enqueue
+                wiki_job_id=enqueue(db,'duplicate source linked')
+                db.execute("INSERT INTO document_sources VALUES(?,?,?,?,?) ON CONFLICT(path) DO UPDATE SET last_seen_at=excluded.last_seen_at",(str(path),document["id"],filename,now(),now()))
+                return job("unchanged","같은 SHA-256의 문서를 재사용했습니다.",digest)
+            return None
+        # Existing documents can be linked without repeating model work.
+        if db.execute("SELECT 1 FROM document_sources WHERE path=? UNION SELECT 1 FROM paper_documents WHERE sha256=?", (str(path),digest)).fetchone():
+            db.execute("BEGIN IMMEDIATE")
+            reused=reuse_existing()
+            if reused:return reused
+            db.rollback()
         try:
             progress('논문 내용 읽는 중')
             reader=PdfReader(path)
@@ -92,7 +102,19 @@ def ingest_file(path, db_path=None, stable_seconds=5, progress=lambda stage:None
             run_id="extract-"+uuid.uuid4().hex
             ready=sum(state=="ready" for _,_,state in pages)
             status="ready" if ready==len(pages) and pages else "partial" if ready else "needs_review"
-            progress('DB 저장·검색 준비 중')
+            progress('문맥 분석·검색 준비 중')
+            policy=load_chunk_policy()
+            index_pages=[dict(id=run_id+"-p"+str(number),run_id=run_id,page_number=number,text=text,
+                              method="pypdf",status=state,char_count=len(text)) for number,text,state in pages]
+            prepared=prepare_index(db,run_id,title,index_pages,policy)
+            after=path.stat()
+            if (stat.st_size,stat.st_mtime_ns)!=(after.st_size,after.st_mtime_ns) or sha256_file(path)!=digest:
+                paper_id=None
+                return job("deferred","검색 준비 중 파일이 변경되어 결과를 저장하지 않았습니다.",digest)
+            progress('DB 저장 중')
+            db.execute("BEGIN IMMEDIATE")
+            reused=reuse_existing()
+            if reused:return reused
             db.execute("INSERT INTO papers VALUES(?,?,?,?,?,?)",(paper_id,title,abstract,source,"unreviewed",now()))
             db.execute("INSERT INTO paper_documents VALUES(?,?,?,?,?,?)",(document_id,paper_id,digest,stat.st_size,len(pages),run_id))
             db.execute("INSERT INTO document_sources VALUES(?,?,?,?,?)",(str(path),document_id,filename,now(),now()))
@@ -100,7 +122,7 @@ def ingest_file(path, db_path=None, stable_seconds=5, progress=lambda stage:None
             for number,text,state in pages:
                 page_id=run_id+"-p"+str(number)
                 db.execute("INSERT INTO pages VALUES(?,?,?,?,?,?,?)",(page_id,run_id,number,text,"pypdf",state,len(text)))
-            chunk_count=reindex_document(db,run_id,load_chunk_policy())["chunks"]
+            chunk_count=reindex_document(db,run_id,policy,prepared=prepared)["chunks"]
             for tag,basis in classify(title,abstract):
                 db.execute("INSERT INTO paper_topics(paper_id,tag,basis) VALUES(?,?,?)",(paper_id,tag,basis))
                 db.execute("INSERT OR IGNORE INTO expert_papers SELECT id,?,? FROM expert_categories WHERE topic_tag=? AND id NOT IN (SELECT expert_id FROM expert_deletions)",(paper_id,"title-abstract-rules-v1",tag))
@@ -108,6 +130,9 @@ def ingest_file(path, db_path=None, stable_seconds=5, progress=lambda stage:None
             return job(status,f"{len(pages)} pages, {chunk_count} searchable chunks; {len(pages)-ready} pages need review",digest)
         except Exception as error:
             db.rollback()
+            if is_database_busy(error):
+                raise
+            paper_id=None; wiki_job_id=None
             return job("failed","논문 처리에 실패했습니다. PDF 형식 또는 문서 분석 서비스 연결을 확인해 주세요.",digest)
 
 def ingest(raw=ROOT/"raw", db_path=None, stable_seconds=5):

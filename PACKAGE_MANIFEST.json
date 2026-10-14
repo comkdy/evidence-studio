@@ -1,6 +1,6 @@
 {
   "app": "Evidence Studio",
-  "release": "github-conversations-2026-10-14",
+  "release": "github-sqlite-contention-2026-10-14",
   "database": "Absent; schema and baseline settings initialize on first launch.",
   "wiki": "Empty; documents are regenerated after ingest.",
   "raw_pdf_count": 0,
@@ -75,8 +75,8 @@
     },
     {
       "path": "backend/chunking.py",
-      "bytes": 16523,
-      "sha256": "ea9a80abb665299fff33347e5097d76159249a62eeed4b96bfd2bf400c1f3893"
+      "bytes": 19747,
+      "sha256": "78dbf1bbd6f994c101effec0307c2c7a9fd256d7071fa62fdbefabcffd3f83ad"
     },
     {
       "path": "backend/conversation_context.py",
@@ -90,8 +90,8 @@
     },
     {
       "path": "backend/embedding_client.py",
-      "bytes": 11457,
-      "sha256": "4e187ef05ba19b3ab1931673d340c667619a79abafefbbd12800dea6162e71c2"
+      "bytes": 12505,
+      "sha256": "d3ac8359d0df27046be7dc641f58ea5f5eea5db833d7c8991b687784f648ab38"
     },
     {
       "path": "backend/embedding_contract.example.json",
@@ -130,8 +130,8 @@
     },
     {
       "path": "backend/page_review.py",
-      "bytes": 11460,
-      "sha256": "afcb0683fd786a59b748b8ebbe62c4b7167bf59fc94fb4de691f6b3e5a6b1545"
+      "bytes": 13165,
+      "sha256": "bd395acdde163292f6180bef0e97a084fcad4cc805a58a98f65f84a927b8b4a1"
     },
     {
       "path": "backend/pilot_api.py",
@@ -140,18 +140,18 @@
     },
     {
       "path": "backend/pilot_curate.py",
-      "bytes": 6309,
-      "sha256": "95ae5bc9653ec9c5a09a59b6451873b5b157304743a938c7789dd986794db5b4"
+      "bytes": 7303,
+      "sha256": "26a0a2b73d823bc0243166c1663844c80a3b0d503db6edfaffb6c5e82da975f7"
     },
     {
       "path": "backend/pilot_db.py",
-      "bytes": 4895,
-      "sha256": "ceb01de9701d676ee9e2523d30e851d65140c6ef3cd420f729a80f36e752f469"
+      "bytes": 6111,
+      "sha256": "114b29dfb3b6d44c835c7dbc063c3d7532bbffbd61f9fb227dc9afb886891882"
     },
     {
       "path": "backend/pilot_ingest.py",
-      "bytes": 7680,
-      "sha256": "d30928192b0c103021bdadda5e078ef0330683560c7ac523a74b48a606f5ca9e"
+      "bytes": 9154,
+      "sha256": "9fc4bc1814d5e1e0a7d015ab5404e1d5995464cb5e0bc147932ba983fc4b699a"
     },
     {
       "path": "backend/pilot_schema.sql",
@@ -160,8 +160,8 @@
     },
     {
       "path": "backend/processing.py",
-      "bytes": 12284,
-      "sha256": "d8d394a9b958199b0f2fd72b07bb66559fa543f7042c08480241e350430eecac"
+      "bytes": 13392,
+      "sha256": "e29dad078b074a8fa0e66521cd84f692064288c2cb2467fc5af12adfc3841219"
     },
     {
       "path": "backend/prompts/abstract_summary_ko.txt",
@@ -205,8 +205,8 @@
     },
     {
       "path": "backend/reindex_search.py",
-      "bytes": 3168,
-      "sha256": "319fce75b6cedbf68d28ffacb6cc4f01d3ce5251106cf93cff4e6b6d824bf50b"
+      "bytes": 3672,
+      "sha256": "40f1bef0fef67818393626a58e3322200ba5eb8da1fb9830e18a3da181868fc6"
     },
     {
       "path": "backend/report_metadata.py",
@@ -280,8 +280,8 @@
     },
     {
       "path": "backend/wiki_engine.py",
-      "bytes": 34770,
-      "sha256": "71640f49c3e100dd50d000b34c6d42d6f98310ae435d52b18bd08dd644018e25"
+      "bytes": 37360,
+      "sha256": "b475adb8c363c9facc9147e56449b012927541129aa7914c2faf6e3fe8f62079"
     },
     {
       "path": "backend/wiki_lint.py",
@@ -300,8 +300,8 @@
     },
     {
       "path": "backend/wiki_store.py",
-      "bytes": 10358,
-      "sha256": "2b02da104527da46acb293ba24c694f188ae7b12967d40ae3162048eab4b6a40"
+      "bytes": 10339,
+      "sha256": "2596f3afff5d5011c65143afa95e42980a77423b19cfc6de3bdbcf416366174f"
     },
     {
       "path": "data/.gitkeep",
@@ -340,8 +340,8 @@
     },
     {
       "path": "docs/HANDOFF.md",
-      "bytes": 11170,
-      "sha256": "cff971e1505e6480db41b0676599d0fff2e0de792dbfafb54aeba248c176c2cd"
+      "bytes": 13700,
+      "sha256": "fe56ee14a3b80e41313603ac072cb912e61657e5281917739a43e5340261b5f8"
     },
     {
       "path": "docs/MARKDOWN_WIKI.md",
@@ -649,6 +649,11 @@
       "sha256": "8f663d3e05f21b1a6ebec0eee8f1acc25ab223b4543de34d64a38d2419d41b99"
     },
     {
+      "path": "tests/test_database_concurrency.py",
+      "bytes": 15824,
+      "sha256": "53c542d5a7599ae9c75cab2194a37d898843352ed3c0bd34e0bcd0290cd812a2"
+    },
+    {
       "path": "tests/test_expert_knowledge_inventory.py",
       "bytes": 8667,
       "sha256": "62f7a27f445e8d33239126daf57a1c9b4471bef8d9f2969424597be2e6bf831c"
@@ -705,8 +710,8 @@
     },
     {
       "path": "tests/test_semantic_chunking.py",
-      "bytes": 20762,
-      "sha256": "91366112788f08805c8a184cf5137effa0808c51682577ef41ff36532acd8f12"
+      "bytes": 20854,
+      "sha256": "435a76a58d1d750a13c245999d73820893a3346d8023bc0d1480ac1751b9d8e1"
     },
     {
       "path": "tests/test_terminology.py",
@@ -739,15 +744,16 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   ],
-  "source_zip_sha256": "e280efc26fa09870f8f459c9638f38a48f07621079a9ddf58c5ac7f6b21d7314",
   "repository": "https://github.com/comkdy/evidence-studio",
-  "visibility": "public",
+  "visibility": "private",
   "bootstrap_admin": "Read BOOTSTRAP_ADMIN_EMPLOYEE_ID from the untracked .env; local-only demo identity when unset.",
   "validation": {
-    "backend_tests": 219,
+    "backend_tests": 233,
     "frontend_tests": 16,
-    "frontend_build": "passed",
+    "frontend_build": "unchanged from previously verified build",
     "external_model_calls": false,
-    "conversation_browser_check": "isolated synthetic data and deterministic test model"
+    "conversation_browser_check": "isolated synthetic data and deterministic test model",
+    "database_concurrency_tests": 14,
+    "test_detail": "Full backend suite: 232 passing; subsequent commit-failure regression and all 14 concurrency / 28 chunking tests passing."
   }
 }

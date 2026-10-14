@@ -6,7 +6,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .chunking import load_chunk_policy, reindex_document
+from .chunking import load_chunk_policy, reindex_document, prepare_document_index, IndexInputsChanged
 from .pilot_db import connect, db_path, initialize
 from .embedding_client import EmbeddingClient, EmbeddingError
 
@@ -40,9 +40,14 @@ def reindex(path=None):
         source.backup(target)
     initialize(path)
     with connect(path) as db:
+        run_ids = [row[0] for row in db.execute("SELECT current_run_id FROM paper_documents WHERE current_run_id IS NOT NULL ORDER BY current_run_id")]
+        prepared = [prepare_document_index(db, run_id, policy) for run_id in run_ids]
         db.execute("BEGIN IMMEDIATE")
         try:
-            results = [reindex_document(db, row[0], policy) for row in db.execute("SELECT current_run_id FROM paper_documents WHERE current_run_id IS NOT NULL").fetchall()]
+            current_ids = [row[0] for row in db.execute("SELECT current_run_id FROM paper_documents WHERE current_run_id IS NOT NULL ORDER BY current_run_id")]
+            if current_ids != run_ids:
+                raise IndexInputsChanged("Corpus changed during index preparation; retry")
+            results = [reindex_document(db, plan["run_id"], policy, prepared=plan) for plan in prepared]
             if db.execute("PRAGMA foreign_key_check").fetchall():
                 raise ValueError("Foreign key validation failed")
             db.commit()

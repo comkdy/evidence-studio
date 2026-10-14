@@ -8,6 +8,7 @@ from pathlib import Path
 from .pilot_db import connect, initialize, now, sync_wiki_memberships
 from .expert_config import refresh_expert_policies
 from .scientific_values import validate_scientific_value
+from .chunking import load_chunk_policy, reindex_document, prepare_document_index, validate_prepared_input
 
 def locate_quote(text, quote):
     # Match only whitespace-normalized literal text; never fuzzy-match a scientific value.
@@ -31,6 +32,18 @@ def apply_curation(path,db_path=None):
     with connect(db_path) as db:
         if db.execute("SELECT 1 FROM curation_runs WHERE payload_sha256=?",(digest,)).fetchone():
             return {"status":"unchanged","run_id":run_id}
+        prepared={}
+        policy=load_chunk_policy()
+        for paper in payload["papers"]:
+            if not paper.get("corrected_title"):continue
+            document=db.execute("SELECT d.current_run_id,p.title FROM paper_documents d JOIN papers p ON p.id=d.paper_id WHERE d.sha256=?", (paper["sha256"],)).fetchone()
+            if document and document["title"]!=paper["corrected_title"]:
+                prepared[paper["sha256"]]=prepare_document_index(db,document["current_run_id"],policy,title=paper["corrected_title"])
+        db.execute("BEGIN IMMEDIATE")
+        if db.execute("SELECT 1 FROM curation_runs WHERE payload_sha256=?",(digest,)).fetchone():
+            return {"status":"unchanged","run_id":run_id}
+        for plan in prepared.values():
+            validate_prepared_input(db,plan)
         # The pilot adds immutable records. Changed IDs require an explicit new revision.
         db.execute("INSERT INTO curation_runs VALUES(?,?,?,?,?)",(run_id,"Codex","assistant-read-and-structure; source quote matched; human review pending",digest,now()))
         for paper in payload["papers"]:
@@ -51,8 +64,9 @@ def apply_curation(path,db_path=None):
                 if old_title!=paper["corrected_title"]:
                     db.execute("INSERT INTO paper_metadata_changes(paper_id,curation_id,field,previous_value,corrected_value,source_span_id) VALUES(?,?,?,?,?,?)",(paper_id,run_id,"title",old_title,paper["corrected_title"],sid))
                     db.execute("UPDATE papers SET title=?,title_source='assistant-source-reviewed',metadata_status='human_review_pending' WHERE id=?",(paper["corrected_title"],paper_id))
-                    from .chunking import load_chunk_policy, reindex_document
-                    reindex_document(db,document["current_run_id"],load_chunk_policy())
+                    plan=prepared.get(paper["sha256"])
+                    if not plan:raise ValueError("Title changed during preparation; retry curation")
+                    reindex_document(db,document["current_run_id"],policy,prepared=plan)
             for claim in paper["claims"]:
                 db.execute("INSERT INTO claims(id,paper_id,curation_id,summary,kind,scope) VALUES(?,?,?,?,?,?)",(claim["id"],paper_id,run_id,claim["summary"],claim["kind"],claim["scope"]))
                 for source in claim["sources"]:

@@ -18,17 +18,50 @@ def db_path():
     return Path(os.environ.get("EVIDENCE_DB_PATH", str(DEFAULT_DB))).resolve()
 
 @contextmanager
-def connect(path=None):
+def connect(path=None, *, timeout=30):
     target = Path(path or db_path())
     target.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(target, timeout=30)
+    connection = sqlite3.connect(target, timeout=timeout)
     connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys=ON")
-    connection.execute("PRAGMA journal_mode=WAL")
     try:
+        connection.execute("PRAGMA foreign_keys=ON")
+        if connection.execute("PRAGMA journal_mode").fetchone()[0].lower() != "wal":
+            connection.execute("PRAGMA journal_mode=WAL")
         yield connection
     finally:
         connection.close()
+
+def is_database_busy(error):
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    code = getattr(error, "sqlite_errorcode", None)
+    if code is not None:
+        return (code & 0xff) in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED)
+    return str(error).lower() in ("database is locked", "database table is locked", "database is busy")
+
+
+@contextmanager
+def write_connection(path=None):
+    """Retry acquisition only; never replay the body or an external API request."""
+    import time
+    acquired = False
+    for attempt in range(3):
+        try:
+            with connect(path, timeout=5) as db:
+                db.execute("BEGIN IMMEDIATE")
+                acquired = True
+                try:
+                    yield db
+                    db.commit()
+                except BaseException:
+                    db.rollback()
+                    raise
+                return
+        except sqlite3.OperationalError as error:
+            if acquired or not is_database_busy(error) or attempt == 2:
+                raise
+            time.sleep(0.1 * (2 ** attempt))
+
 
 def initialize(path=None):
     admin_id = bootstrap_admin_id()

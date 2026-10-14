@@ -4,16 +4,20 @@ import argparse
 import json
 import os
 import re
+import sqlite3
+import logging
 import threading
 import time
 from contextlib import nullcontext
 from pathlib import Path
 from uuid import uuid4
-from .pilot_db import connect, db_path, initialize, now
+from .pilot_db import connect, db_path, initialize, now, write_connection, is_database_busy
 from .llm_client import CompanyLLM, LLMError
 from .wiki_store import WikiStore, WikiError, digest, safe_path, atomic_write, parse_markdown
 from .wiki_policy import load_prompt
 
+LEASE_SECONDS = 600
+LEASE_RENEW_SECONDS = 30
 VERSION = 'markdown-wiki-v2-shared'
 CONTENT_KINDS = frozenset(('source', 'topic', 'specialization'))
 COMMON_CONTENT_KINDS = frozenset(('source', 'topic'))
@@ -486,45 +490,98 @@ def reconcile(database=None, llm=None, reason='knowledge update', heartbeat=lamb
 
 def run_jobs(database=None, llm=None):
     owner = uuid4().hex
+    stop_renewal = threading.Event()
+    lease_lost = threading.Event()
+    acquired = False
+    busy_message = 'DB가 사용 중입니다. 잠시 후 Wiki 작업을 자동 재시도합니다.'
+
+    def check_owner(db):
+        row = db.execute('SELECT owner FROM wiki_worker_lease WHERE id=1').fetchone()
+        if not row or row['owner'] != owner:
+            lease_lost.set()
+            raise WikiError('Wiki 작업 소유권이 변경되었습니다.')
+
     def renew():
-        with connect(database) as db:
-            cursor = db.execute('UPDATE wiki_worker_lease SET expires_at=? WHERE id=1 AND owner=?', (time.time()+600,owner))
-            if cursor.rowcount != 1:
-                raise WikiError('Wiki 작업 소유권이 변경되었습니다.')
-            db.commit()
-    with connect(database) as db:
-        if not db.execute("SELECT 1 FROM wiki_jobs WHERE state IN ('queued','running') LIMIT 1").fetchone():
-            return {'status':'idle'}
-        db.execute('BEGIN IMMEDIATE')
-        lease = db.execute('SELECT * FROM wiki_worker_lease WHERE id=1').fetchone()
-        if lease and lease['expires_at'] > time.time():
-            return {'status':'busy'}
-        db.execute('INSERT OR REPLACE INTO wiki_worker_lease VALUES(1,?,?)', (owner,time.time()+600))
-        # A running job with an expired lease was interrupted and must be retried.
-        db.execute("UPDATE wiki_jobs SET state='queued' WHERE state='running'")
-        jobs = list(db.execute("SELECT id,reason,scope,expert_id FROM wiki_jobs WHERE state='queued' ORDER BY id"))
-        for job in jobs:
-            db.execute("UPDATE wiki_jobs SET state='running',error='' WHERE id=?", (job['id'],))
-        db.commit()
+        if lease_lost.is_set():
+            raise WikiError('Wiki 작업 소유권이 변경되었습니다.')
+        with write_connection(database) as db:
+            check_owner(db)
+            db.execute('UPDATE wiki_worker_lease SET expires_at=? WHERE id=1 AND owner=?', (time.time()+LEASE_SECONDS,owner))
+
+    def keep_lease():
+        # Also renew during a long model request, not only between documents.
+        interval = LEASE_RENEW_SECONDS
+        while not stop_renewal.wait(interval):
+            try:
+                renew()
+                interval = LEASE_RENEW_SECONDS
+            except sqlite3.OperationalError as error:
+                if not is_database_busy(error):
+                    lease_lost.set()
+                    return
+                interval = 3
+            except WikiError:
+                return
+
+    renewal = None
     result = {'status':'idle'}
-    errors=[]
+    errors = []
     try:
+        with connect(database) as db:
+            if not db.execute("SELECT 1 FROM wiki_jobs WHERE state IN ('queued','running') LIMIT 1").fetchone():
+                return result
+        with write_connection(database) as db:
+            lease = db.execute('SELECT * FROM wiki_worker_lease WHERE id=1').fetchone()
+            if lease and lease['expires_at'] > time.time():
+                return {'status':'busy'}
+            db.execute('INSERT OR REPLACE INTO wiki_worker_lease VALUES(1,?,?)', (owner,time.time()+LEASE_SECONDS))
+            db.execute("UPDATE wiki_jobs SET state='queued' WHERE state='running'")
+            jobs = [dict(r) for r in db.execute("SELECT id,reason,scope,expert_id FROM wiki_jobs WHERE state='queued' ORDER BY id")]
+        acquired = True
+        renewal = threading.Thread(target=keep_lease, name='wiki-lease', daemon=True)
+        renewal.start()
         for job in jobs:
+            renew()
+            with write_connection(database) as db:
+                check_owner(db)
+                db.execute("UPDATE wiki_jobs SET state='running',error='',finished_at=NULL WHERE id=?", (job['id'],))
             try:
                 result = reconcile(database, llm, job['reason'], renew, scope=job['scope'], expert_id=job['expert_id'])
-                with connect(database) as db:
+                renew()
+                with write_connection(database) as db:
+                    check_owner(db)
                     db.execute("UPDATE wiki_jobs SET state='done',finished_at=?,error='' WHERE id=?", (now(),job['id']))
-                    db.commit()
             except (WikiError, LLMError, OSError, ValueError) as error:
+                if lease_lost.is_set():
+                    return {'status':'deferred','error':'Wiki 작업을 다른 워커가 이어서 처리합니다.'}
                 message = str(error) if isinstance(error, (WikiError, LLMError)) else 'Wiki 파일 또는 입력을 확인하세요.'
-                with connect(database) as db:
+                with write_connection(database) as db:
+                    check_owner(db)
                     db.execute("UPDATE wiki_jobs SET state='failed',finished_at=?,error=? WHERE id=?", (now(),message,job['id']))
-                    db.commit()
                 errors.append(message)
         return {'status':'failed','error':errors[0]} if errors else result
+    except sqlite3.OperationalError as error:
+        if not is_database_busy(error):
+            raise
+        # No failed PDF/Wiki classification for transient writer contention.
+        return {'status':'deferred','error':busy_message}
     finally:
-        with connect(database) as db:
-            db.execute('DELETE FROM wiki_worker_lease WHERE owner=?', (owner,)); db.commit()
+        stop_renewal.set()
+        if renewal:
+            renewal.join(timeout=20)
+        if acquired:
+            try:
+                with write_connection(database) as db:
+                    lease = db.execute('SELECT owner FROM wiki_worker_lease WHERE id=1').fetchone()
+                    if lease and lease['owner'] == owner:
+                        db.execute("UPDATE wiki_jobs SET state='queued',finished_at=NULL,error=? WHERE state='running'", (busy_message,))
+                        db.execute('DELETE FROM wiki_worker_lease WHERE owner=?', (owner,))
+            except sqlite3.OperationalError as error:
+                if not is_database_busy(error):
+                    raise
+                # Keep the durable running record; the expired lease recovers it.
+                logging.getLogger(__name__).warning('Wiki lease release deferred by database contention; work remains recoverable.')
+
 
 
 def start_worker(database=None):
