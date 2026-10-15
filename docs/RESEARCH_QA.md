@@ -57,6 +57,11 @@ PostgreSQL/ANN 전환, 논리적 논문과 PDF 버전 분리, claim/measurement 
 
 ## 이어지는 대화·진행 상태·중지
 
+첫 화면부터 대화 영역과 여러 줄 메시지 입력창을 표시한다. 첫 전송은 **대화 시작**, 다음 전송은 **이어서 질문**이며 입력창에서 **답변 중지**를 실행한다. Enter는 전송, Shift+Enter는 줄바꿈이다. 한국어 IME 조합 중 Enter는 전송하지 않는다. 이전 대화를 다시 열면 같은 대화에 질문을 덧붙인다.
+
+로컬 Vite 개발·미리보기의 API proxy는 `changeOrigin: false`로 브라우저가 보낸 Host를 유지한다. 4173 화면에서 8011 API로 전달할 때 Origin과 Host가 달라 질문 POST가 403으로 차단되는 문제를 방지한다. 서버의 동일 출처 검사 자체는 유지한다. 사내에서는 FastAPI가 제공하는 동일 출처 화면 또는 Host/프로토콜을 올바르게 전달하는 사내 프록시를 사용한다.
+
+
 화면은 `POST /api/pilot/ask-stream`에 `question`, `expert_ids`, `selection` (auto/manual), `history_run_ids`를 보낸다. 응답은 NDJSON이며 `progress` (stage/message), `experts` (ids/names), `result` 또는 `error` 이벤트다. 빈 줄은 연결 유지용 heartbeat다. 프록시에서는 buffering을 끄고 답변 제한 시간보다 긴 read timeout을 설정한다. 기존 `/ask` JSON 응답 API도 유지한다.
 
 최근 완료 답변 최대 6개를 본인 소유인지 확인한 뒤 문맥으로 사용한다. 서버는 각 이전 질문 최대 1,000자·답변 최대 2,200자만 가져온다. 클라이언트가 보내는 임의의 과거 답변 본문은 신뢰하지 않는다. 계획·보완 검색·답변·검토에 대화 문맥을 전달하되 논문 근거와 분리하고, 후속 질문도 현재 전문가 범위에서 원천을 새로 검색한다. 질문의 대명사와 생략된 주제 해석을 위해 최근 질문의 주제를 검색에도 보충한다.

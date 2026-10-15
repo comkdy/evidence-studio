@@ -13,6 +13,7 @@ import type { CorpusStatus, Detail, Expert, Paper, PilotView, ConversationTurn, 
 import { AbstractOverview, ClaimCard, GuideView, Pager, StatusView, WikiCard } from './PilotViews';
 import { ExpertCreate } from './ExpertCreate';
 import { ResearchDialogue } from './ResearchDialogue';
+import { ResearchComposer } from './ResearchComposer';
 import { contextRunIds, conversationTurns, readResearchStream, saveConversation } from './researchConversation';
 import type { ProgressEvent } from './researchConversation';
 import { researchModeLabels, savedResearchMode } from './researchAnswer';
@@ -24,7 +25,7 @@ import type { CategoryCounts, CategorySelection } from './LibraryCategories';
 import './PilotApp.css';
 import './PilotLayout.css';
 const descriptions:Record<PilotView,string>={
- search:'질문에 맞는 전문가를 자동으로 선택하고, 축적된 Wiki와 근거 논문을 바탕으로 답변합니다.',
+ search:'질문을 이어가며 전문가의 Wiki와 논문에서 근거를 확인하세요. 앞선 대화의 맥락을 함께 참고합니다.',
  library:'논문의 주장과 주요 수치를 원문과 함께 읽어보세요.',
  wiki:'공통 지식을 바탕으로 전문가별 지식을 축적합니다. Wiki의 내용과 근거, 마지막 갱신 시점과 변경 이력을 확인하세요.',
  team:'공유를 선택한 질문과 사용한 근거를 살펴보세요.',
@@ -150,10 +151,10 @@ function ResearchWorkspace({session}:{session:Session}){
   {mobile&&<button className="pilot-shade" aria-label="메뉴 닫기" onClick={()=>setMobile(false)}/>}
   <aside className={'pilot-sidebar '+(mobile?'is-open':'')}>
    <a className="pilot-side-brand" href="#library"><Layers3 size={25}/><span>Evidence Studio</span></a>
-   <button className="pilot-new" onClick={newQuestion}><Plus size={17}/>새 질문 시작<ArrowUpRight size={15}/></button>
+   <button className="pilot-new" onClick={newQuestion}><Plus size={17}/>새 대화 시작<ArrowUpRight size={15}/></button>
    <div className="pilot-nav-label">RESEARCH</div>
    <nav aria-label="주 메뉴">{([['search',MessageSquare],['wiki',BookOpen],['library',FileText],['dictionary',BookA],['team',Users]] as const).map(([id,Icon])=><button key={id} aria-current={view===id?'page':undefined} onClick={()=>navigate(id)}><Icon size={18}/>{viewNames[id]}{id==='library'&&<small>{summary?.counts.papers??'—'}</small>}</button>)}</nav>
-   <div className="pilot-recent-title"><span>내 최근 질문</span><Clock3 size={13}/></div><div className="pilot-recent">{history.filter(r=>!r.deleted).slice(0,5).map(r=><button key={r.id} onClick={()=>openHistory(r)}><MessageSquare size={13}/><span>{r.question}</span></button>)}{!history.some(r=>!r.deleted)&&<p>질문한 근거를 여기서 다시 열 수 있습니다.</p>}</div>
+   <div className="pilot-recent-title"><span>내 최근 대화</span><Clock3 size={13}/></div><div className="pilot-recent">{history.filter(r=>!r.deleted).slice(0,5).map(r=><button key={r.id} onClick={()=>openHistory(r)}><MessageSquare size={13}/><span>{r.question}</span></button>)}{!history.some(r=>!r.deleted)&&<p>이전 대화를 열어 질문을 이어갈 수 있습니다.</p>}</div>
    <div className="pilot-side-bottom"><ProcessingBadge data={processing.data} error={processing.error} reviewPages={needsReview} onOpen={()=>navigate('status')}/>
     {isExpertManager&&<button onClick={()=>navigate('settings')} aria-current={view==='settings'?'page':undefined}><Settings2 size={17}/>전문가 설정</button>}
     {session.user.permissions.manage_users&&<button onClick={()=>navigate('users')} aria-current={view==='users'?'page':undefined}><Users size={17}/>유저 관리</button>}
@@ -162,27 +163,27 @@ function ResearchWorkspace({session}:{session:Session}){
    </div>
   </aside>
   <div className="pilot-workspace"><header className="pilot-top"><button className="pilot-menu-toggle" aria-label="메뉴 열기" onClick={()=>setMobile(true)}><Menu size={21}/></button><strong>{viewNames[view]}</strong><button className="account-session" onClick={()=>navigate('personal')}><span>{displayName(session)}</span><span className={'account-role '+session.user.role}>{roleLabels[session.user.role]}</span>{session.mode==='local_admin'&&<small>임시 접속</small>}</button></header>
-  <main id="main" tabIndex={-1} className="pilot-main">
+  <main id="main" tabIndex={-1} className={'pilot-main'+(view==='search'?' research-main':'')}>
    {notice&&<div className="pilot-notice" role="status">{notice}</div>}{error&&<div className="pilot-error" role="alert">{error}<button onClick={()=>window.location.reload()}>다시 시도</button></div>}
    {view==='settings'&&isExpertManager&&lastDeleted&&<div className="expert-delete-notice" role="status"><span>{lastDeleted.name} 전문가를 삭제했습니다.</span><button disabled={restoring} onClick={undoExpertDeletion}>{restoring?'복원 중…':'실행 취소'}</button><button disabled={restoring} aria-label="삭제 알림 닫기" onClick={()=>setLastDeleted(null)}><X size={15}/></button></div>}
-   <div className="pilot-page-heading"><div className="pilot-hero"><div className="eyebrow">EVIDENCE STUDIO</div><h1>{view==='search'?'읽어 둔 논문에서 근거를 찾으세요.':viewNames[view]}</h1><p>{descriptions[view]}</p></div>
+   <div className="pilot-page-heading"><div className="pilot-hero"><div className="eyebrow">EVIDENCE STUDIO</div><h1>{view==='search'?'전문가와 연구 대화를 시작하세요.':viewNames[view]}</h1><p>{descriptions[view]}</p></div>
     {view==='library'&&<div className="pilot-header-actions"><button className="secondary" disabled={busy} onClick={refreshData}>새로고침</button><button className="primary" disabled title="논문 업로드 기능을 준비 중입니다."><Upload size={15}/>논문 추가</button></div>}
     {(view==='team'||view==='personal')&&<button className="primary" onClick={newQuestion}><Plus size={15}/>새 질문</button>}
    </div>
    {(view==='library'||view==='status')&&<div className="pilot-compact-stats"><span><strong>{summary?.curated_papers??'—'}</strong>편 구조화</span><span><strong>{summary?.counts.claims??'—'}</strong>개 주장</span><span><strong>{summary?.counts.measurements??'—'}</strong>개 수치</span><span><strong>{summary?.counts.condition_values??'—'}</strong>개 조건 항목</span></div>}
 
-   {view==='search'&&<>
+   {view==='search'&&<section className="research-chat" aria-label="전문가와 대화">
     {record&&<div className="pilot-result-actions"><span>대화 {turns.length}회 · {visibility==='team'?'팀 공유':'나만 보기'}</span><button disabled={questionBusy} onClick={()=>{changeRecord(record.id,{deleted:true});conversationId.current=null;updateTurns([]);setSavedId(null);navigate('personal');setPersonalFilter('trash');}}><Trash2 size={13}/>대화 삭제</button></div>}
-    <ResearchDialogue turns={turns} progress={progress} busy={questionBusy} onStop={cancelSearch} onPaper={openPaper} onRetry={text=>{setQuery(text);document.getElementById('research-question')?.focus();}} onNotice={setNotice}/>
-    <div className={turns.length?'research-composer':''}>
-    <form className="pilot-search" onSubmit={e=>{e.preventDefault();askQuestion();}}><Search size={19}/><input id="research-question" aria-label="연구 질문" maxLength={1000} value={query} onChange={e=>setQuery(e.target.value)} placeholder={turns.length?'이 답변에 대해 더 궁금한 점을 물어보세요.':'예: FeFET endurance · OCTRAM retention'}/><button className="primary" type="submit" disabled={!summary||questionBusy||!query.trim()||(selectionMode==='manual'&&!activeExperts.length)}>{questionBusy?'답변 준비 중…':turns.length?'이어서 질문':'질문하기'}</button></form>
+    <ResearchDialogue turns={turns} progress={progress} busy={questionBusy} onPaper={openPaper} onRetry={text=>{setQuery(text);document.getElementById('research-question')?.focus();}} onNotice={setNotice}/>
+    <div className="research-composer">
+    <ResearchComposer value={query} onChange={setQuery} onSend={()=>void askQuestion()} onStop={cancelSearch} busy={questionBusy} canSend={!!summary&&(selectionMode!=='manual'||!!activeExperts.length)} hasTurns={!!turns.length}/>
     <div className="pilot-question-options"><div className="pilot-segments" aria-label="전문가 선택 방식"><button disabled={questionBusy} aria-pressed={selectionMode==='auto'} onClick={()=>setSelectionMode('auto')}>전문가 자동 선택</button><button disabled={questionBusy} aria-pressed={selectionMode==='manual'} onClick={()=>setSelectionMode('manual')}>직접 선택</button></div><div className="pilot-segments" aria-label="질문 공개 범위"><button disabled={questionBusy} aria-pressed={visibility==='team'} onClick={()=>changeVisibility('team')}><Users size={13}/>팀에 공유</button><button disabled={questionBusy} aria-pressed={visibility==='private'} onClick={()=>changeVisibility('private')}><Lock size={13}/>나만 보기</button></div></div>
     <p className="research-context-note">{turns.length?'앞선 대화를 참고하되, 각 답변의 근거는 전문가의 Wiki와 논문에서 다시 확인합니다.':'전문가의 Wiki와 담당 논문에서 질문에 맞는 근거를 찾고 대화를 이어갑니다.'}</p>
     {selectionMode==='manual'&&<div className="pilot-expert-choices">{summary?.experts.filter(e=>e.enabled!==0).map(e=><label key={e.id}><input type="checkbox" disabled={questionBusy} checked={selectedExperts.includes(e.id)} onChange={()=>setSelectedExperts(old=>old.includes(e.id)?old.filter(x=>x!==e.id):[...old,e.id])}/><span>{e.name}<small>논문 {e.paper_count}편</small></span></label>)}</div>}
     {!turns.length&&!questionBusy&&<div className="pilot-prompts">{['OCTRAM retention','FeFET endurance','CFET SRAM','NAND erase'].map(q=><button key={q} disabled={!summary} onClick={()=>askQuestion(q)}>{q}<ArrowUpRight size={14}/></button>)}</div>}
     <p className="pilot-muted">대화 목록은 이 브라우저에, 답변 당시의 근거 기록은 본인만 조회할 수 있도록 서버에 보관됩니다.</p>
     </div>
-   </>}
+   </section>}
 
    {view==='library'&&<div className="pilot-library-layout">
     <LibraryCategories value={categories} counts={library.facet_counts} total={library.total} onChange={changeCategories}/><div className="pilot-library-results">

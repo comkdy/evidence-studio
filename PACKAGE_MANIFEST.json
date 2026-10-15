@@ -1,6 +1,6 @@
 {
   "app": "Evidence Studio",
-  "release": "github-wiki-bulk-retry-2026-10-15",
+  "release": "github-conversation-ui-proxy-2026-10-15",
   "database": "Absent; schema and baseline settings initialize on first launch.",
   "wiki": "Empty; documents are regenerated after ingest.",
   "raw_pdf_count": 0,
@@ -349,19 +349,19 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
-      "path": "dist/assets/index-BCq_wYUK.css",
-      "bytes": 70430,
-      "sha256": "4196c6a3774e7e25df40a9b33ed0e492de1b1a4ad07cdb8dbd2ea7d0b8f35300"
+      "path": "dist/assets/index-BiUC9LfS.js",
+      "bytes": 497444,
+      "sha256": "71392a2d3c71b764002bdf8bd6cec87fbd09821eacdb7e76e3d343ad37a47a1c"
     },
     {
-      "path": "dist/assets/index-BHXnoL77.js",
-      "bytes": 496232,
-      "sha256": "fe7f17ba6d83a9ed5eed6693bdea1cc7c45493835550ded938c2b3f781566de6"
+      "path": "dist/assets/index-CSnLbDbu.css",
+      "bytes": 72629,
+      "sha256": "fe5070b717aca12509b8dcca9f5d294f4b34c424c7d95e893c2f1c07dcfa3cf9"
     },
     {
       "path": "dist/index.html",
       "bytes": 848,
-      "sha256": "6e222d477c6aaae20fcbfbd0b080e06b52fae404b79c72a2b7cee070792b40c1"
+      "sha256": "bf7073cee8828d772525d4e657246b7ab1b77455d7a46db5638f5ae4c243279f"
     },
     {
       "path": "docs/DATABASE_PLAN.md",
@@ -405,8 +405,8 @@
     },
     {
       "path": "docs/RESEARCH_QA.md",
-      "bytes": 12811,
-      "sha256": "91e5f270bd73ad18f6c58d98f37a5ca700eaa43d2afa892f2f7a27a97db0a6b6"
+      "bytes": 13657,
+      "sha256": "7377aa522942c40a7822a66730178053e3101b7f6c3ab1ec9adb8c13dc11c632"
     },
     {
       "path": "docs/TERMINOLOGY.md",
@@ -515,8 +515,8 @@
     },
     {
       "path": "src/PilotApp.tsx",
-      "bytes": 35194,
-      "sha256": "8a27025019622f5fc72d5cd09ed4e0b2ea668395e7b2b2cf0149b142476bd02e"
+      "bytes": 34962,
+      "sha256": "59c18136c539c12f0089f01224ad0f3813ca31106c818450b4c5711d588eeee7"
     },
     {
       "path": "src/PilotLayout.css",
@@ -544,14 +544,19 @@
       "sha256": "c4ad6420fca3ae53045ab7d3e48b86f4364331ff339fda344e3ec0e6a071f408"
     },
     {
+      "path": "src/ResearchComposer.tsx",
+      "bytes": 1489,
+      "sha256": "896ae1b3a4d9a8c19e75486c264b6a076a4934faf34ab568bf3dd231c949cd6b"
+    },
+    {
       "path": "src/ResearchConversation.css",
-      "bytes": 2540,
-      "sha256": "2d9a8974fa19d0e7dfec94cd215db3afe41da004a7a3d56eea4c75d7f7d5bdb8"
+      "bytes": 4755,
+      "sha256": "943fe1563168dceacae89d78d11852902ad45c417d56bad85857ecc4c5ecb39c"
     },
     {
       "path": "src/ResearchDialogue.tsx",
-      "bytes": 4335,
-      "sha256": "80faa75dd892411e71bb55a61a0bddecd972e193eee1743f4fa47c2e200d0b22"
+      "bytes": 4524,
+      "sha256": "62e4c19bf77a6242fc5114cc7a3f2b5695748a24a6ad32e0c9449c7ea960dc12"
     },
     {
       "path": "src/SourceReviews.css",
@@ -657,6 +662,11 @@
       "path": "tests/research-answer.test.mjs",
       "bytes": 3190,
       "sha256": "47b4deadc1d09dd4f79de1c1209bbf6672d5e48e495cce2254971e690f3766f6"
+    },
+    {
+      "path": "tests/research-composer.test.mjs",
+      "bytes": 3452,
+      "sha256": "3993d724ef7a7e9aa6416382b9fd8f5e8630ce0b0f8400f2af54a5ab4c467c12"
     },
     {
       "path": "tests/research-conversation.test.mjs",
@@ -840,8 +850,8 @@
     },
     {
       "path": "vite.config.ts",
-      "bytes": 312,
-      "sha256": "2774952dec3fd5df7472fded5b9f086a663baf77a816a5c7c5490db09e78ecbf"
+      "bytes": 378,
+      "sha256": "bf40e8530f85b96190f59559332aef013dbbb89df5b4c9d0dbc0588b4a39f644"
     },
     {
       "path": "wiki/.gitkeep",
@@ -854,12 +864,12 @@
   "bootstrap_admin": "Read BOOTSTRAP_ADMIN_EMPLOYEE_ID from the untracked .env; local-only demo identity when unset.",
   "validation": {
     "backend_tests": 332,
-    "frontend_tests": 27,
+    "frontend_tests": 32,
     "frontend_build": "TypeScript and Vite production build passed; refreshed tracked dist assets.",
     "external_model_calls": false,
-    "conversation_browser_check": "isolated synthetic data and deterministic test model",
+    "conversation_browser_check": "Actual localhost preview: multiline composer, real streamed stage, follow-up, and prior-answer ID saved in the subsequent trace. LLM unconfigured; evidence-only fallback, no generated answer claimed. Fixed proxy Origin/Host mismatch. Test conversation moved to browser trash.",
     "database_concurrency_tests": 14,
-    "test_detail": "332 backend tests passed inside the isolated diagnostic runner. 27 frontend tests and the TypeScript/Vite build passed. Bulk retry tests cover failures beyond the visible history, unchanged successful/running/queued jobs, permissions, concurrent and stale requests, skipped unavailable experts, and shared successful paper/Wiki reuse across overlapping jobs. Only synthetic fixtures and local fake HTTP providers were used; no internal model API calls.",
+    "test_detail": "32 frontend tests, TypeScript and Vite production build passed. Re-ran 8 isolated conversation backend tests for prior context, ownership, progress and cancellation. The unchanged backend had 332 passing tests in the preceding release. No internal model API calls.",
     "slow_inference_tests": 16,
     "adaptive_wiki_tests": 20,
     "wiki_usage_tests": 13,
@@ -869,6 +879,8 @@
     "citation_matching_tests": 19,
     "citation_integration_tests": "Wiki publication preserves raw spans and existing documents on rejection; error reasons reach processing history; lint records raw quotes and offsets.",
     "wiki_retry_tests": 10,
-    "wiki_bulk_retry_tests": 9
+    "wiki_bulk_retry_tests": 9,
+    "conversation_backend_tests": 8,
+    "conversation_composer_tests": 5
   }
 }
