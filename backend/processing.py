@@ -7,6 +7,7 @@ from datetime import datetime,timezone
 from pathlib import Path
 from fastapi import APIRouter
 from .pilot_db import ROOT,DEFAULT_DB,connect,now,write_connection,is_database_busy
+from .wiki_retry import failure_snapshot
 
 SCAN_SECONDS=60
 STABLE_SECONDS=5
@@ -217,7 +218,7 @@ def processing_status(database=None):
     active.sort(key=lambda e:{'running':0,'failed':1,'queued':2,'review':3,'waiting':4}[e['state']])
     recent=active[:8]+[e for e in entries if not e['superseded'] and e not in active][:max(0,12-len(active[:8]))]
     return {'watcher':watcher,'counts':counts,'review_pages':review_count,'tasks':recent,'total_tasks':len(entries),
-            'wiki_jobs':wiki_activity,
+            'wiki_jobs':wiki_activity,'wiki_retry':failure_snapshot(jobs.values()),
             'revision':max((e['updated_at'] for e in entries),default='')}
 
 

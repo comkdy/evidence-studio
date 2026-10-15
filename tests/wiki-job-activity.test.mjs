@@ -64,3 +64,38 @@ test('retry API error reaches the caller for display',async()=>{
  try{await assert.rejects(wikiRetry.retryWikiJob(job),/최신 실패/);}
  finally{globalThis.fetch=original;}
 });
+
+test('bulk retry uses the total failure count including jobs outside the visible cards',()=>{
+ for(const canRetry of [false,true]){
+  for(const failed_count of [0,25]){
+   const html=renderToStaticMarkup(React.createElement(WikiJobActivity,{jobs:[{...job,state:'running'}],canRetry,retrySummary:{failed_count,snapshot:'a'.repeat(64)}}));
+   assert.equal(html.includes('aria-label="실패한 Wiki 작업 모두 재시도"'),canRetry&&failed_count>0);
+   if(canRetry&&failed_count>0)assert.ok(html.includes('실패한 작업 모두 재시도 (25)'));
+  }
+ }
+});
+
+test('bulk retry makes one guarded request for all observed failures',async()=>{
+ const original=globalThis.fetch,calls=[];
+ const result={status:'queued',queued_count:17,queued_job_ids:[1,2],skipped:[{job_id:8,reason:'expert_unavailable'}]};
+ globalThis.fetch=async(path,init)=>{
+  calls.push({path,init});
+  return new Response(JSON.stringify(result),{status:202});
+ };
+ try{
+  assert.deepEqual(await wikiRetry.retryFailedWikiJobs({failed_count:18,snapshot:'b'.repeat(64)}),result);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].path,'/api/pilot/wiki-maintenance/jobs/retry-failed');
+  assert.equal(calls[0].init.method,'POST');
+  assert.deepEqual(JSON.parse(calls[0].init.body),{failure_snapshot:'b'.repeat(64)});
+ }finally{globalThis.fetch=original;}
+});
+
+test('bulk retry preserves a changed-failure error for display without automatic resubmission',async()=>{
+ const original=globalThis.fetch;let calls=0;
+ globalThis.fetch=async()=>{calls++;return new Response(JSON.stringify({detail:'실패 작업 목록이 변경되었습니다.'}),{status:409});};
+ try{
+  await assert.rejects(wikiRetry.retryFailedWikiJobs({failed_count:2,snapshot:'c'.repeat(64)}),/목록이 변경/);
+  assert.equal(calls,1);
+ }finally{globalThis.fetch=original;}
+});

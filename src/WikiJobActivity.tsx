@@ -2,18 +2,23 @@ import { useRef, useState } from 'react';
 import { time } from './pilotData';
 import { tokenLabel, durationLabel, callLabel } from './wikiUsage';
 import type { WikiJob } from './wikiUsage';
-import { retryWikiJob } from './wikiRetry';
+import { retryWikiJob, retryFailedWikiJobs } from './wikiRetry';
+import type { WikiRetrySummary } from './wikiRetry';
 
 const states={queued:'대기',running:'처리 중',done:'처리 종료',failed:'문제 발생'};
 const phases:Record<string,string>={source:'원천 Wiki',source_part:'원문 묶음',topic:'공통 주제',topic_part:'중간 종합',specialization:'전문가 특화',other:'Wiki 처리'};
 
-export function WikiJobActivity({jobs,canRetry=false,onRetried}:{jobs:WikiJob[];canRetry?:boolean;onRetried?:()=>void}){
+export function WikiJobActivity({jobs,canRetry=false,retrySummary,onRetried}:{jobs:WikiJob[];canRetry?:boolean;retrySummary?:WikiRetrySummary;onRetried?:()=>void}){
  const [expanded,setExpanded]=useState(false);
  const pending=useRef(new Set<number>());
+ const bulkPending=useRef(false);
+ const [bulkRetrying,setBulkRetrying]=useState(false);
+ const [bulkFeedback,setBulkFeedback]=useState<{snapshot:string;accepted:boolean;text:string}|null>(null);
+ const bulkAccepted=bulkFeedback?.accepted&&bulkFeedback.snapshot===retrySummary?.snapshot;
  const [retrying,setRetrying]=useState<Set<number>>(new Set());
  const [feedback,setFeedback]=useState<Record<number,{failure:string|null;accepted:boolean;text:string}>>({});
  async function retry(job:WikiJob){
-  if(!canRetry||job.state!=='failed'||pending.current.has(job.id))return;
+  if(!canRetry||job.state!=='failed'||bulkPending.current||pending.current.has(job.id))return;
   pending.current.add(job.id);setRetrying(new Set(pending.current));
   setFeedback(previous=>({...previous,[job.id]:{failure:job.finished_at,accepted:false,text:''}}));
   try{
@@ -24,9 +29,33 @@ export function WikiJobActivity({jobs,canRetry=false,onRetried}:{jobs:WikiJob[];
    setFeedback(previous=>({...previous,[job.id]:{failure:job.finished_at,accepted:false,text:error instanceof Error?error.message:'재시도를 요청하지 못했습니다.'}}));
   }finally{pending.current.delete(job.id);setRetrying(new Set(pending.current));}
  }
+ async function retryAll(){
+  if(!canRetry||!retrySummary?.failed_count||bulkPending.current||pending.current.size||bulkAccepted)return;
+  const observed=retrySummary;
+  bulkPending.current=true;setBulkRetrying(true);setBulkFeedback(null);
+  try{
+   const result=await retryFailedWikiJobs(observed);
+   const skipped=result.skipped.length;
+   setBulkFeedback({snapshot:observed.snapshot,accepted:true,text:result.queued_count+'개 작업의 재시도를 요청했습니다.'+(skipped?' 삭제되거나 사용 중지된 전문가의 작업 '+skipped+'개는 제외했습니다.':'')});
+   setFeedback(previous=>{
+    const next={...previous};
+    for(const job of jobs)if(result.queued_job_ids.includes(job.id))next[job.id]={failure:job.finished_at,accepted:true,text:'재시도를 요청했습니다. 변경 없는 완료 문서는 재사용합니다.'};
+    return next;
+   });
+  }catch(error){
+   setBulkFeedback({snapshot:observed.snapshot,accepted:false,text:error instanceof Error?error.message:'전체 재시도를 요청하지 못했습니다.'});
+  }finally{
+   bulkPending.current=false;setBulkRetrying(false);onRetried?.();
+  }
+ }
  return <section className="wiki-activity" aria-labelledby="wiki-activity-title">
   <div className="wiki-activity-heading"><h3 id="wiki-activity-title">Wiki 작업 내역</h3><span>모델 · 호출 · 토큰 · 소요 시간</span></div>
   <p className="wiki-activity-caption">실제 LLM 호출을 작업별로 집계합니다. 진행 중에는 5초마다 갱신하며, 토큰은 API가 반환한 사용량입니다.</p>
+  {canRetry&&!!retrySummary?.failed_count&&<div className="wiki-bulk-retry">
+   <button type="button" className="secondary" aria-label="실패한 Wiki 작업 모두 재시도" disabled={bulkRetrying||retrying.size>0||!!bulkAccepted} onClick={()=>void retryAll()}>{bulkRetrying?'요청 중…':bulkAccepted?'재시도 요청 완료':'실패한 작업 모두 재시도 ('+retrySummary.failed_count+')'}</button>
+   <span>전체 실패 작업을 대상으로 하며, 변경 없는 완료 문서는 재사용합니다.</span>
+  </div>}
+  {bulkFeedback&&<p className={'wiki-retry-feedback'+(bulkFeedback.accepted?'':' is-error')} role={bulkFeedback.accepted?'status':'alert'}>{bulkFeedback.text}</p>}
   {!jobs.length&&<p className="pilot-muted">아직 Wiki 작업이 없습니다.</p>}
   {(expanded?jobs:jobs.slice(0,3)).map(job=>{
    const u=job.usage,notice=feedback[job.id]?.failure===job.finished_at?feedback[job.id]:undefined;
@@ -34,7 +63,7 @@ export function WikiJobActivity({jobs,canRetry=false,onRetried}:{jobs:WikiJob[];
     <header><div><strong>{job.label}</strong><span>#{job.id} · {time(job.created_at)}</span></div><span className="wiki-job-state">{states[job.state]}</span></header>
     {job.error&&<p className="wiki-job-error" role="status">{job.error}</p>}
     {canRetry&&job.state==='failed'&&<div className="wiki-job-retry">
-     <button type="button" className="secondary" aria-label={'Wiki 작업 #'+job.id+' 재시도'} disabled={retrying.has(job.id)||notice?.accepted} onClick={()=>void retry(job)}>{retrying.has(job.id)?'요청 중…':notice?.accepted?'재시도 대기':'재시도'}</button>
+     <button type="button" className="secondary" aria-label={'Wiki 작업 #'+job.id+' 재시도'} disabled={bulkRetrying||retrying.has(job.id)||notice?.accepted} onClick={()=>void retry(job)}>{retrying.has(job.id)?'요청 중…':notice?.accepted?'재시도 대기':'재시도'}</button>
      <span>변경 없는 완료 문서는 재사용합니다.</span>
     </div>}
     {job.state==='failed'&&notice?.text&&<p className={'wiki-retry-feedback'+(notice.accepted?'':' is-error')} role={notice.accepted?'status':'alert'}>{notice.text}</p>}

@@ -184,6 +184,14 @@ SQLite vector 검색은 담당 범위 내 exact cosine 방식이다. 현재 자�
 
 API: `POST /api/pilot/wiki-maintenance/jobs/{job_id}/retry`, JSON은 `{"failed_at":"조회한 finished_at 값"}`이다. 과거 기록에 종료 시각이 없다면 `null`을 전달한다. `202` 응답의 `job_id`는 원래 ID이며 `already_requested`는 중복 요청 여부다. 완료된 작업·변경된 실패 시점·삭제/중지된 전문가는 `409`, 없는 작업은 `404`, 권한 없는 사용자는 `403`이다. 기존 전체 재시도 API `/wiki-maintenance/retry`는 계속 폐기 상태(`410`)로 유지한다.
 
+### 실패한 작업 모두 재시도
+
+작업 현황의 **실패한 작업 모두 재시도 (N)** 버튼은 관리자에게 표시된다. N은 화면에 보이는 최근 12개가 아닌 DB 전체의 실패 작업 수다. 성공·대기·진행 중인 작업은 변경하지 않으며, 기존 작업 ID·범위·실행 이력을 유지한다. 기존 worker가 대기열을 처리하고 입력이 같은 완료 문서를 재사용하므로 겹치는 실패 작업도 성공한 원천 논문·공통 주제 Wiki를 다시 생성하지 않는다. PDF/DB ingest는 실행하지 않는다.
+
+삭제·사용 중지된 전문가의 작업은 실패 상태를 유지하고 제외 건수를 표시한다. HTTP 요청은 짧은 트랜잭션에서 대기열 상태만 변경하며 LLM이나 파일 작업을 수행하지 않는다. 처리 중에는 개별·일괄 재시도 버튼의 중복 요청을 막는다.
+
+API: `POST /api/pilot/wiki-maintenance/jobs/retry-failed`, JSON은 `{"failure_snapshot":"/processing의 wiki_retry.snapshot"}`이다. 서버는 전체 실패 작업의 ID·종료 시각을 해시한 snapshot을 트랜잭션 안에서 다시 확인한다. 조회 후 실패 목록이 바뀌거나 같은 요청이 반복되면 `409`로 거절하고 최신 상태를 조회한다. 새로 실패한 작업을 오래된 요청으로 다시 실행하지 않는다. 유효한 요청은 `202`와 `queued_count`, `queued_job_ids`, `skipped`를 반환한다. 실패 작업이 없으면 0건으로 끝난다. 종전 `/wiki-maintenance/retry` API를 다시 활성화하는 기능은 아니다.
+
 ## 토큰 비용을 해석하는 방법
 
 용어 사전은 공통 지침에 더하는 별도 편집 규칙이다. 입력에 등장하는 승인 항목만 최대 24개/6,000자로 제한하여 compile·답변·lint에 전달한다. 수정 시 전체 Wiki 재생성이나 embedding 재계산을 요청하지 않는다. 다음 관련 Wiki 갱신에서 선택된 용어 fingerprint로 재작성 여부를 판단하고, 답변 trace에는 당시 사전 버전과 적용 항목을 보존한다. 인용·수치·단위 및 기존 수동 문서는 사전의 정규식 치환 대상이 아니다. 상세 내용은 [용어 지침](TERMINOLOGY.md)을 참고한다.

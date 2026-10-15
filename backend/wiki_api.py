@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from .pilot_db import connect, now
+from .wiki_retry import failure_snapshot, expert_retryable
 from .llm_client import CompanyLLM, LLMError
 from .wiki_store import WikiStore, WikiError, safe_path, digest
 from .wiki_engine import snapshot, current, validate_sections, render_sections, escaped, enqueue, CONTENT_KINDS, COMMON_CONTENT_KINDS
@@ -305,15 +306,35 @@ def retry_wiki_job(job_id: int, request: WikiJobRetry):
             raise HTTPException(409, '실패한 Wiki 작업만 재시도할 수 있습니다.')
         if row['finished_at'] != request.failed_at:
             raise HTTPException(409, '작업 상태가 변경되었습니다. 최신 실패 내역을 확인한 뒤 다시 시도해 주세요.')
-        if row['scope'] == 'expert':
-            active = db.execute("""SELECT e.id FROM expert_categories e WHERE e.id=?
-                AND NOT EXISTS(SELECT 1 FROM expert_deletions d WHERE d.expert_id=e.id)
-                AND NOT EXISTS(SELECT 1 FROM expert_policies p WHERE p.expert_id=e.id AND p.enabled=0)""",
-                (row['expert_id'],)).fetchone()
-            if not active:
-                raise HTTPException(409, '삭제되었거나 사용 중지된 전문가는 재시도할 수 없습니다.')
+        if not expert_retryable(db, row):
+            raise HTTPException(409, '삭제되었거나 사용 중지된 전문가는 재시도할 수 없습니다.')
         db.execute("UPDATE wiki_jobs SET state='queued',finished_at=NULL,error='' WHERE id=? AND state='failed'", (job_id,))
     return dict(status='queued', job_id=job_id, already_requested=False)
+
+
+class WikiFailedJobsRetry(BaseModel):
+    failure_snapshot: str = Field(pattern=r'^[0-9a-f]{64}$')
+
+
+@router.post('/wiki-maintenance/jobs/retry-failed', status_code=202)
+def retry_failed_wiki_jobs(request: WikiFailedJobsRetry):
+    from .auth import require_permission
+    from .pilot_db import write_connection
+    require_permission('refresh_wiki')
+    # Compare and enqueue atomically. A repeated/stale request cannot restart a
+    # newer failure, and the transaction never includes model or file work.
+    with write_connection() as db:
+        failed = db.execute("SELECT id,state,finished_at,scope,expert_id FROM wiki_jobs WHERE state='failed' ORDER BY id").fetchall()
+        if failure_snapshot(failed)['snapshot'] != request.failure_snapshot:
+            raise HTTPException(409, '실패 작업 목록이 변경되었습니다. 최신 상태를 확인한 뒤 다시 시도해 주세요.')
+        queued, skipped = [], []
+        for job in failed:
+            if not expert_retryable(db, job):
+                skipped.append(dict(job_id=job['id'], reason='expert_unavailable'))
+                continue
+            db.execute("UPDATE wiki_jobs SET state='queued',finished_at=NULL,error='' WHERE id=? AND state='failed'", (job['id'],))
+            queued.append(job['id'])
+    return dict(status='queued', queued_count=len(queued), queued_job_ids=queued, skipped=skipped)
 
 
 @router.get('/wiki-maintenance/jobs/{job_id}')

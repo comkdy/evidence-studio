@@ -4,10 +4,11 @@ import { get, time } from './pilotData';
 import './ProcessingActivity.css';
 import { WikiJobActivity } from './WikiJobActivity';
 import type { WikiJob } from './wikiUsage';
+import type { WikiRetrySummary } from './wikiRetry';
 
 type State='queued'|'running'|'completed'|'failed'|'review'|'waiting';
 type Task={id:string;kind:string;label:string;state:State;stage:string;detail:string;paper_id:string|null;expert_id:string|null;updated_at:string;superseded:boolean};
-export type Processing={watcher:{state:string;checked_at:string|null;interval_seconds:number;detail:string};counts:Record<State,number>;review_pages:number;tasks:Task[];wiki_jobs?:WikiJob[];total_tasks:number;revision:string};
+export type Processing={watcher:{state:string;checked_at:string|null;interval_seconds:number;detail:string};counts:Record<State,number>;review_pages:number;tasks:Task[];wiki_jobs?:WikiJob[];wiki_retry?:WikiRetrySummary;total_tasks:number;revision:string};
 const labels:Record<State,string>={queued:'대기',running:'처리 중',completed:'완료',failed:'문제 발생',review:'검토 필요',waiting:'연결 대기'};
 
 export function useProcessing(onChanged:()=>void){
@@ -47,7 +48,7 @@ export function ProcessingView({data,error,onPaper,canRetryWiki=false,onRetried}
  <p className="processing-caption">새 논문과 전문가 지식의 처리 상태를 확인하세요. {data?.watcher.checked_at&&<>최근 자료 확인 {time(data.watcher.checked_at)}</>}</p>
  {error?<p className="pilot-error" role="alert">작업 상태를 불러오지 못했습니다. 잠시 후 자동으로 다시 확인합니다.</p>:data?.watcher.state!=='watching'&&<p className="pilot-notice">{data?.watcher.detail||'감시 상태를 확인하고 있습니다.'}</p>}
  <div className="processing-counts">{(['queued','running','completed','failed'] as const).map(s=><div key={s}><span>{labels[s]}</span><strong>{data?.counts[s]??'—'}</strong></div>)}</div>
- <WikiJobActivity jobs={data?.wiki_jobs??[]} canRetry={canRetryWiki} onRetried={onRetried}/>
+ <WikiJobActivity jobs={data?.wiki_jobs??[]} canRetry={canRetryWiki} retrySummary={data?.wiki_retry} onRetried={onRetried}/>
  <div className="processing-tasks">{data?.tasks.map(task=><article className={'processing-task '+task.state} key={task.id}><span className="processing-task-icon">{task.state==='running'?<RefreshCw size={16}/>:task.state==='completed'?<CircleCheck size={16}/>:task.state==='failed'||task.state==='review'?<TriangleAlert size={16}/>:<Clock3 size={16}/>}</span><div><header><strong>{task.label}</strong><span>{labels[task.state]}</span></header><p>{task.stage}{task.superseded?' · 이전 기록':''}</p>{task.detail&&<p className="processing-detail">{task.detail}</p>}<small>{time(task.updated_at)}</small>{task.paper_id&&<button onClick={()=>onPaper(task.paper_id!)}><FileText size={12}/>자료 보기</button>}</div></article>)}</div>
  {!data?.tasks.length&&<p className="pilot-muted">새 논문이 들어오거나 전문가를 생성하면 처리 내역이 여기에 표시됩니다.</p>}
  {!!data?.tasks.length&&<p className="processing-caption">진행 중이거나 확인이 필요한 작업과 최근 기록을 최대 12개 표시합니다.</p>}

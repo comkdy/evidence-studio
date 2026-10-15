@@ -14,3 +14,5 @@
 .wiki-job-error{margin:12px 0;padding:10px 12px;border-left:3px solid #c45b4b;background:#fff5f2;color:#8f3227;font-size:12px;line-height:1.65;white-space:pre-line;overflow-wrap:anywhere}
 
 .wiki-job-retry{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0}.wiki-job-retry .secondary{font-size:11px;padding:6px 12px}.wiki-job-retry span,.wiki-retry-feedback{font-size:11px;line-height:1.7;color:#7589a3}.wiki-retry-feedback.is-error{color:#a16f63}
+
+.wiki-bulk-retry{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0}.wiki-bulk-retry .secondary{font-size:11px;padding:7px 12px}.wiki-bulk-retry span{font-size:11px;line-height:1.7;color:#7589a3}
