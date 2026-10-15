@@ -163,7 +163,7 @@ def processing_status(database=None):
         membership={eid:{r[0] for r in db.execute('SELECT paper_id FROM expert_papers WHERE expert_id=?',(eid,))} for eid in experts}
         waiting=[dict(r) for r in db.execute("SELECT expert_id,refs_json FROM wiki_files WHERE status='awaiting_llm'")]
         # Unique Wiki jobs: one automatic job may belong to several paper cards.
-        visible_jobs=sorted(jobs.values(),key=lambda j:(0 if j['state']=='running' else 1 if j['state']=='queued' else 2,-j['id']))[:12]
+        visible_jobs=sorted(jobs.values(),key=lambda j:({'running':0,'queued':1,'failed':2}.get(j['state'],3),-j['id']))[:12]
         from .wiki_usage import job_usages
         usage=job_usages(db,[j['id'] for j in visible_jobs])
         wiki_activity=[dict(id=j['id'],scope=j['scope'],state=j['state'],

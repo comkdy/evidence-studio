@@ -283,6 +283,39 @@ def refresh_expert_wiki(expert_id:str):
     return {'status':'queued','job_id':job_id,'scope':'expert','expert_id':expert_id}
 
 
+class WikiJobRetry(BaseModel):
+    # Compare the observed failure so an old click cannot retry a newer failure.
+    failed_at: str | None = Field(..., max_length=64)
+
+
+@router.post('/wiki-maintenance/jobs/{job_id}/retry', status_code=202)
+def retry_wiki_job(job_id: int, request: WikiJobRetry):
+    from .auth import require_permission
+    from .pilot_db import write_connection
+    require_permission('refresh_wiki')
+    # A short writer transaction serializes concurrent clicks. Never run an LLM
+    # or rebuild a Wiki here; the existing worker owns the selected job.
+    with write_connection() as db:
+        row = db.execute('SELECT * FROM wiki_jobs WHERE id=?', (job_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, 'Wiki 작업을 찾을 수 없습니다.')
+        if row['state'] in ('queued', 'running'):
+            return dict(status=row['state'], job_id=job_id, already_requested=True)
+        if row['state'] != 'failed':
+            raise HTTPException(409, '실패한 Wiki 작업만 재시도할 수 있습니다.')
+        if row['finished_at'] != request.failed_at:
+            raise HTTPException(409, '작업 상태가 변경되었습니다. 최신 실패 내역을 확인한 뒤 다시 시도해 주세요.')
+        if row['scope'] == 'expert':
+            active = db.execute("""SELECT e.id FROM expert_categories e WHERE e.id=?
+                AND NOT EXISTS(SELECT 1 FROM expert_deletions d WHERE d.expert_id=e.id)
+                AND NOT EXISTS(SELECT 1 FROM expert_policies p WHERE p.expert_id=e.id AND p.enabled=0)""",
+                (row['expert_id'],)).fetchone()
+            if not active:
+                raise HTTPException(409, '삭제되었거나 사용 중지된 전문가는 재시도할 수 없습니다.')
+        db.execute("UPDATE wiki_jobs SET state='queued',finished_at=NULL,error='' WHERE id=? AND state='failed'", (job_id,))
+    return dict(status='queued', job_id=job_id, already_requested=False)
+
+
 @router.get('/wiki-maintenance/jobs/{job_id}')
 def wiki_job(job_id:int):
     from .auth import require_permission

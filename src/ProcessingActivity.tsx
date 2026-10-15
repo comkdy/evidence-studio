@@ -11,7 +11,7 @@ export type Processing={watcher:{state:string;checked_at:string|null;interval_se
 const labels:Record<State,string>={queued:'대기',running:'처리 중',completed:'완료',failed:'문제 발생',review:'검토 필요',waiting:'연결 대기'};
 
 export function useProcessing(onChanged:()=>void){
- const [data,setData]=useState<Processing|null>(null),[error,setError]=useState(false);
+ const [data,setData]=useState<Processing|null>(null),[error,setError]=useState(false),[reload,setReload]=useState(0);
  const changed=useRef(onChanged);changed.current=onChanged;
  useEffect(()=>{
   const controller=new AbortController();let timer:ReturnType<typeof setTimeout>;let revision:string|null=null;let fetching=false;
@@ -22,8 +22,8 @@ export function useProcessing(onChanged:()=>void){
   }
   void refresh();document.addEventListener('visibilitychange',refresh);
   return()=>{controller.abort();clearTimeout(timer);document.removeEventListener('visibilitychange',refresh);};
- },[]);
- return {data,error};
+ },[reload]);
+ return {data,error,refresh:()=>setReload(value=>value+1)};
 }
 
 export function ProcessingBadge({data,error,reviewPages,onOpen}:{data:Processing|null;error:boolean;reviewPages:number;onOpen:()=>void}){
@@ -42,12 +42,12 @@ export function ProcessingBadge({data,error,reviewPages,onOpen}:{data:Processing
  </section>;
 }
 
-export function ProcessingView({data,error,onPaper}:{data:Processing|null;error:boolean;onPaper:(id:string)=>void}){
+export function ProcessingView({data,error,onPaper,canRetryWiki=false,onRetried}:{data:Processing|null;error:boolean;onPaper:(id:string)=>void;canRetryWiki?:boolean;onRetried?:()=>void}){
  return <section className="processing-view" aria-label="작업 진행 현황"><div className="processing-heading"><h2>작업 진행 현황</h2><span className={data?.watcher.state==='watching'?'is-watching':''}><i/>{error?'상태 조회 실패':data?.watcher.state==='watching'?'자동 감시 중 · 60초 간격':'감시 확인 필요'}</span></div>
  <p className="processing-caption">새 논문과 전문가 지식의 처리 상태를 확인하세요. {data?.watcher.checked_at&&<>최근 자료 확인 {time(data.watcher.checked_at)}</>}</p>
  {error?<p className="pilot-error" role="alert">작업 상태를 불러오지 못했습니다. 잠시 후 자동으로 다시 확인합니다.</p>:data?.watcher.state!=='watching'&&<p className="pilot-notice">{data?.watcher.detail||'감시 상태를 확인하고 있습니다.'}</p>}
  <div className="processing-counts">{(['queued','running','completed','failed'] as const).map(s=><div key={s}><span>{labels[s]}</span><strong>{data?.counts[s]??'—'}</strong></div>)}</div>
- <WikiJobActivity jobs={data?.wiki_jobs??[]}/>
+ <WikiJobActivity jobs={data?.wiki_jobs??[]} canRetry={canRetryWiki} onRetried={onRetried}/>
  <div className="processing-tasks">{data?.tasks.map(task=><article className={'processing-task '+task.state} key={task.id}><span className="processing-task-icon">{task.state==='running'?<RefreshCw size={16}/>:task.state==='completed'?<CircleCheck size={16}/>:task.state==='failed'||task.state==='review'?<TriangleAlert size={16}/>:<Clock3 size={16}/>}</span><div><header><strong>{task.label}</strong><span>{labels[task.state]}</span></header><p>{task.stage}{task.superseded?' · 이전 기록':''}</p>{task.detail&&<p className="processing-detail">{task.detail}</p>}<small>{time(task.updated_at)}</small>{task.paper_id&&<button onClick={()=>onPaper(task.paper_id!)}><FileText size={12}/>자료 보기</button>}</div></article>)}</div>
  {!data?.tasks.length&&<p className="pilot-muted">새 논문이 들어오거나 전문가를 생성하면 처리 내역이 여기에 표시됩니다.</p>}
  {!!data?.tasks.length&&<p className="processing-caption">진행 중이거나 확인이 필요한 작업과 최근 기록을 최대 12개 표시합니다.</p>}
