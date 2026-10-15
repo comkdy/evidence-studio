@@ -6,7 +6,7 @@ from .wiki_store import WikiError, digest
 PROMPTS = Path(__file__).with_name('prompts')
 POLICY_PATH = PROMPTS / 'wiki_policy.md'
 CONTRACTS = {'compile': 'wiki_compile.txt', 'answer': 'wiki_answer.txt', 'lint': 'wiki_lint.txt'}
-CONTRACTS.update(plan='research_plan.txt', refine='research_refine.txt', review='research_review.txt')
+CONTRACTS.update(plan='research_plan.txt', refine='research_refine.txt', review='research_review.txt', report='report_edit.txt')
 
 
 @dataclass(frozen=True)

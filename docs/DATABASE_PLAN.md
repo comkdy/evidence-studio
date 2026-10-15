@@ -44,3 +44,8 @@ Wiki 본문의 원본은 `wiki/` 아래 Markdown입니다. DB는 파일 메타�
 - 검색·생성 품질은 실제 사내 모델과 팀 질문으로 [비교 평가](RESEARCH_EVALUATION.md).
 
 공개 배포본에는 운영 DB·Wiki·원본 논문이 없습니다. 앱 시작 시 빈 DB와 기본 설정을 초기화하며 사내 자료로 구축합니다.
+
+
+## 연구 보고서와 버전 (구현)
+
+reports에는 작성자·제목·현재 revision을, report_versions에는 본문 JSON·요청·모델·사용량·시점을 저장합니다. 보고서는 안정적인 ID의 구간으로 구성되며 각 구간의 진술은 원천 claim/원문 사본을 참조합니다. report_versions는 불변 snapshot이고 복원도 새 revision을 만듭니다. 모델 호출은 트랜잭션 밖에서 수행하고 revision 비교 후 짧게 저장합니다. 기존 논문·claim·수치·Wiki 구조는 유지합니다. 보고서는 Wiki 재료나 다른 유저의 검색 지식으로 자동 편입되지 않습니다. 자세한 API·권한·출력은 [보고서 작성 안내](REPORT_AUTHORING.md)에 정리했습니다.

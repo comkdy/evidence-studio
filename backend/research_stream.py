@@ -23,6 +23,9 @@ class ConversationRequest(BaseModel):
     expert_ids: list[str] = Field(default_factory=list, max_length=20)
     selection: Literal['auto', 'manual'] = 'auto'
     history_run_ids: list[str] = Field(default_factory=list, max_length=6)
+    report_id: str | None = Field(default=None, max_length=80)
+    report_section_id: str | None = Field(default=None, max_length=80)
+    report_revision: int | None = Field(default=None, ge=1)
 
 
 @router.post('/ask-stream')
@@ -34,6 +37,8 @@ async def ask_stream(request: ConversationRequest):
     # Validate ownership before sending headers or calling any external model.
     from starlette.concurrency import run_in_threadpool
     conversation = await run_in_threadpool(conversation_context, request.history_run_ids)
+    from .report_store import focus_context
+    conversation += await run_in_threadpool(focus_context, request.report_id, request.report_section_id, request.report_revision)
     if not _slots.acquire(blocking=False):
         raise HTTPException(429, '현재 답변 작업이 많습니다. 잠시 후 다시 질문해 주세요.')
     events = queue.SimpleQueue()
@@ -63,7 +68,8 @@ async def ask_stream(request: ConversationRequest):
             events.put({'type': 'experts', 'ids': ids, 'names': names})
             checkpoint()
             result = answer(Question(question=request.question, expert_ids=ids,
-                                     history_run_ids=request.history_run_ids))
+                                     history_run_ids=request.history_run_ids, report_id=request.report_id,
+                                     report_section_id=request.report_section_id, report_revision=request.report_revision))
             checkpoint()
             events.put({'type': 'result', 'result': result})
         except ResearchCancelled:

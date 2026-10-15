@@ -191,6 +191,9 @@ class Question(BaseModel):
     expert_ids:list[str]=Field(min_length=1,max_length=20)
     mode:Literal['deep']='deep'
     history_run_ids:list[str]=Field(default_factory=list,max_length=6)
+    report_id:str|None=Field(default=None,max_length=80)
+    report_section_id:str|None=Field(default=None,max_length=80)
+    report_revision:int|None=Field(default=None,ge=1)
 
 
 @router.get('/answer-runs/{run_id}')

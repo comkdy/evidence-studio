@@ -20,9 +20,10 @@ export function ResearchDialogue({turns,progress,busy,onPaper,onRetry,onNotice}:
  return <div className="research-conversation" aria-label="연구 대화">
   {!turns.length&&<div className="research-welcome"><MessageSquare size={24}/><h2>한 질문에서 끝나지 않는 연구 대화</h2><p>답변을 읽고 적용 조건을 묻거나, 다른 논문의 결과와 비교해 보세요.</p><span>질문과 답변이 이곳에 차례로 쌓입니다.</span></div>}
   {turns.map((turn,index)=><section className="research-turn" key={turn.id} aria-label={'대화 '+(index+1)}>
-   <div className="research-question"><span>나</span><p>{turn.question}</p></div>
+   <div className="research-question"><span>나{turn.focusTitle?' · '+turn.focusTitle:''}</span><p>{turn.question}</p></div>
    <div className="research-response">
     {!!turn.expertNames.length&&<div className="pilot-contributors"><BookOpen size={16}/><span>참여 전문가<strong>{turn.expertNames.join(' · ')}</strong></span></div>}
+    {turn.reportChange&&<div className="report-change-result"><Check size={17}/><div><strong>{turn.reportChange.sectionTitle} 수정 완료 · v{turn.reportChange.revision}</strong><p>다른 구간은 유지했습니다. 보고서의 출처와 변경 이력에서 확인할 수 있습니다.</p><small>{turn.reportChange.model} · {(turn.reportChange.elapsedMs/1000).toFixed(1)}초</small></div></div>}
     {turn.result&&<>
      <ResearchAnswerView result={turn.result}/>
      <details className="research-evidence"><summary>근거 보기 · 주장 {turn.result.total_claims}개 · 원문 {turn.result.hits.length}개</summary>

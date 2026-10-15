@@ -305,3 +305,16 @@ CREATE TABLE IF NOT EXISTS terminology_revisions (
   snapshot_json TEXT NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL,
   PRIMARY KEY(term_id,revision)
 );
+
+-- Private authored artifacts; never inputs to canonical paper/Wiki ingestion.
+CREATE TABLE IF NOT EXISTS reports (
+ id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, title TEXT NOT NULL,
+ revision INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_reports_owner ON reports(owner_id,updated_at);
+CREATE TABLE IF NOT EXISTS report_versions (
+ report_id TEXT NOT NULL REFERENCES reports(id), revision INTEGER NOT NULL,
+ document_json TEXT NOT NULL, instruction TEXT NOT NULL, section_id TEXT NOT NULL,
+ model TEXT NOT NULL, usage_json TEXT NOT NULL, created_at TEXT NOT NULL,
+ PRIMARY KEY(report_id,revision)
+);

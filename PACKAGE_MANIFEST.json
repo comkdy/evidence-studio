@@ -1,6 +1,6 @@
 {
   "app": "Evidence Studio",
-  "release": "github-conversation-ui-proxy-2026-10-15",
+  "release": "github-report-authoring-2026-10-15",
   "database": "Absent; schema and baseline settings initialize on first launch.",
   "wiki": "Empty; documents are regenerated after ingest.",
   "raw_pdf_count": 0,
@@ -35,8 +35,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 5268,
-      "sha256": "ba84bd44116839a0f8aa30aeb68629920dc69da3eacc33d068bcf6d0e18012bf"
+      "bytes": 5415,
+      "sha256": "db87cf20e9d994ecfea8508132ebb449e031758f497c4515a5b5cb82014367bc"
     },
     {
       "path": "backend/__init__.py",
@@ -145,8 +145,8 @@
     },
     {
       "path": "backend/main.py",
-      "bytes": 2330,
-      "sha256": "e70d532713367e77db16c28b0dca8923d18986bb2390aeb5fbaa4a680d11ffcf"
+      "bytes": 2414,
+      "sha256": "e4ee9373f80d15b66b775cc5d301b7ec405b5b3bef5fc7e48f67cec3761b2e18"
     },
     {
       "path": "backend/page_review.py",
@@ -175,8 +175,8 @@
     },
     {
       "path": "backend/pilot_schema.sql",
-      "bytes": 16732,
-      "sha256": "2109812d2fc76b7ca2dfffac394694368d647db91cc3b20b223fb4ba9b0f0563"
+      "bytes": 17389,
+      "sha256": "54c5452c18094a0fa86156cd716310d15e7ed169209142cb56214aaa6bb48f8f"
     },
     {
       "path": "backend/processing.py",
@@ -187,6 +187,11 @@
       "path": "backend/prompts/abstract_summary_ko.txt",
       "bytes": 1567,
       "sha256": "1919b69b2b3c7bce9679702acf369a402f88bcadaf922ad54f6488d79521420e"
+    },
+    {
+      "path": "backend/prompts/report_edit.txt",
+      "bytes": 1870,
+      "sha256": "b745976f4d4752cd2c596c621fc4f2a6c4d43742adcd7d1820c54a36720fd20f"
     },
     {
       "path": "backend/prompts/research_plan.txt",
@@ -234,9 +239,29 @@
       "sha256": "40f1bef0fef67818393626a58e3322200ba5eb8da1fb9830e18a3da181868fc6"
     },
     {
+      "path": "backend/report_api.py",
+      "bytes": 7106,
+      "sha256": "77f72a4b9a3e54f6d4773aad41d71f3ef75b156ffc59ecf7dc4bacac15f14ae4"
+    },
+    {
+      "path": "backend/report_engine.py",
+      "bytes": 6857,
+      "sha256": "3684e864abc5fdf7d14f6c0c642b38780445d4e1cd8ac95a7052b67ed2ea5b05"
+    },
+    {
+      "path": "backend/report_export.py",
+      "bytes": 3719,
+      "sha256": "5107e670ab6a8df804d4d58fc718f4deac6f52369664f42bba5127b455f4e155"
+    },
+    {
       "path": "backend/report_metadata.py",
       "bytes": 14481,
       "sha256": "b3ad77179beceb8b1d16d7ee28913da2c76f9876cb23d236e4da863d5d945a05"
+    },
+    {
+      "path": "backend/report_store.py",
+      "bytes": 4440,
+      "sha256": "db2e2d9e5cd2e744f9a0060ab3076d941489b3cb0fcc755c2efbf82430ac17aa"
     },
     {
       "path": "backend/requirements-dev.txt",
@@ -260,8 +285,8 @@
     },
     {
       "path": "backend/research_stream.py",
-      "bytes": 4732,
-      "sha256": "726233a82fe6bce33eb7609e15fe174ab426d1f1fc7ae2bfba5eba881fade3ff"
+      "bytes": 5258,
+      "sha256": "27829ec92bcb16e0a3d4d20521511e62cbea1340b81d5430bfc42adb99650651"
     },
     {
       "path": "backend/scientific_values.py",
@@ -295,13 +320,13 @@
     },
     {
       "path": "backend/wiki_answer.py",
-      "bytes": 17098,
-      "sha256": "00343366ac058552b8cc8e09d08966bce4c4f9c4750113137a9f5b1f4ed95f7f"
+      "bytes": 17301,
+      "sha256": "965f11a7a41c79bdc7d7e545412f1a8b5f2d5d6c2786b3104c11a1e706fe16c7"
     },
     {
       "path": "backend/wiki_api.py",
-      "bytes": 17247,
-      "sha256": "2dfcf8f208ffaf2f97df483df7c22922994bd86840ffacc111f626b810bc94ca"
+      "bytes": 17426,
+      "sha256": "05fdea079dc147db2e4595e1bd1969251c94a19ac369993762aa3c345650a8c8"
     },
     {
       "path": "backend/wiki_budget.py",
@@ -320,8 +345,8 @@
     },
     {
       "path": "backend/wiki_policy.py",
-      "bytes": 1373,
-      "sha256": "6c512a6c4ff65c090e392b2a5bdf2ee776b26e5b70b19df8d60cb7d45f0b5ad2"
+      "bytes": 1399,
+      "sha256": "0f2132d78ea030d32523db7a994be66503a1ef6afa171b045551e686c58e7643"
     },
     {
       "path": "backend/wiki_retrieval.py",
@@ -349,24 +374,24 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
-      "path": "dist/assets/index-BiUC9LfS.js",
-      "bytes": 497444,
-      "sha256": "71392a2d3c71b764002bdf8bd6cec87fbd09821eacdb7e76e3d343ad37a47a1c"
+      "path": "dist/assets/index-BSzDipYX.css",
+      "bytes": 83051,
+      "sha256": "eb4401f8ab58d9a080cb944d4d81c6ef2b2ca746f22fc875f94a354f70521c34"
     },
     {
-      "path": "dist/assets/index-CSnLbDbu.css",
-      "bytes": 72629,
-      "sha256": "fe5070b717aca12509b8dcca9f5d294f4b34c424c7d95e893c2f1c07dcfa3cf9"
+      "path": "dist/assets/index-PpSxMHcI.js",
+      "bytes": 512590,
+      "sha256": "323297ac24183fcb3cf7410d5424eeba7b971b9f1c940baba9302b4aeb214e27"
     },
     {
       "path": "dist/index.html",
       "bytes": 848,
-      "sha256": "bf7073cee8828d772525d4e657246b7ab1b77455d7a46db5638f5ae4c243279f"
+      "sha256": "d1dc03212c5606491fce38ca983896d426913ca76268c92d5d3203692e703f07"
     },
     {
       "path": "docs/DATABASE_PLAN.md",
-      "bytes": 5557,
-      "sha256": "b1af18965bb1689422391893542c67af88a863e36028f63d16a90752edd35ac0"
+      "bytes": 6317,
+      "sha256": "964c7f518df47b38b3ef4380bd1b03542d1ec7b0a97c27372a45df2db00370d1"
     },
     {
       "path": "docs/DIAGNOSTICS.md",
@@ -399,14 +424,19 @@
       "sha256": "4324eb570b85898c93b235679a1e22a64c7ca036b5c6d34f71b83296818c9055"
     },
     {
+      "path": "docs/REPORT_AUTHORING.md",
+      "bytes": 6051,
+      "sha256": "c1e207782e0b867c5bb639ef4e4ce887fd42a2aba65034460a53dfe8bf400fe9"
+    },
+    {
       "path": "docs/RESEARCH_EVALUATION.md",
       "bytes": 5486,
       "sha256": "3826517ec2bdd30adcc6bda38a10aabded429ddcd983e4126c1ec682f3c72b6f"
     },
     {
       "path": "docs/RESEARCH_QA.md",
-      "bytes": 13657,
-      "sha256": "7377aa522942c40a7822a66730178053e3101b7f6c3ab1ec9adb8c13dc11c632"
+      "bytes": 14012,
+      "sha256": "4e2eb63166fb1c3997867e87549a91b441c1c245ec286cc8ae3d59082f04f7a1"
     },
     {
       "path": "docs/TERMINOLOGY.md",
@@ -515,8 +545,8 @@
     },
     {
       "path": "src/PilotApp.tsx",
-      "bytes": 34962,
-      "sha256": "59c18136c539c12f0089f01224ad0f3813ca31106c818450b4c5711d588eeee7"
+      "bytes": 38613,
+      "sha256": "4fe3148e2178c955c08ea6cab00d340dec496cce799e62326f3459953a599917"
     },
     {
       "path": "src/PilotLayout.css",
@@ -539,14 +569,24 @@
       "sha256": "428f0a002f1816ecd93fd54aded50c2c28d83e1929f300bca64e9baeaa1301bd"
     },
     {
+      "path": "src/ReportPane.tsx",
+      "bytes": 8426,
+      "sha256": "9f9f260a0ed6a5909a60379d0907c98ab7a83494ee8b9db0339bc92816565ae3"
+    },
+    {
+      "path": "src/ReportWorkspace.css",
+      "bytes": 10443,
+      "sha256": "0b2d91e2a83eff78f4ba7c4de45a30c61cb14b489c6c6fa874eb7d2e8201c9be"
+    },
+    {
       "path": "src/ResearchAnswerView.tsx",
       "bytes": 2204,
       "sha256": "c4ad6420fca3ae53045ab7d3e48b86f4364331ff339fda344e3ec0e6a071f408"
     },
     {
       "path": "src/ResearchComposer.tsx",
-      "bytes": 1489,
-      "sha256": "896ae1b3a4d9a8c19e75486c264b6a076a4934faf34ab568bf3dd231c949cd6b"
+      "bytes": 1865,
+      "sha256": "cb7eef4c7d424ac42f9fac1347a880ec01dd4288057da713aeed6526cc406ec0"
     },
     {
       "path": "src/ResearchConversation.css",
@@ -555,8 +595,8 @@
     },
     {
       "path": "src/ResearchDialogue.tsx",
-      "bytes": 4524,
-      "sha256": "62e4c19bf77a6242fc5114cc7a3f2b5695748a24a6ad32e0c9449c7ea960dc12"
+      "bytes": 4970,
+      "sha256": "e2baf350cee47317bafb91652e2553085509d864c3bcba2d847273b7013c4fb0"
     },
     {
       "path": "src/SourceReviews.css",
@@ -615,8 +655,13 @@
     },
     {
       "path": "src/pilotData.ts",
-      "bytes": 6444,
-      "sha256": "1551a4ea683fa1d910e5392ef3b73f446865d759abc409e1945705cf8cffc071"
+      "bytes": 6578,
+      "sha256": "46197099c181f1d701997b6325c4a5e13f5dcc0e19485640ce9a204767cfe39c"
+    },
+    {
+      "path": "src/reportData.ts",
+      "bytes": 2288,
+      "sha256": "b72342b5b1877c307ea9a96e4447940101b5aa951bbbe95bb09dbca3045e2ae8"
     },
     {
       "path": "src/researchAnswer.ts",
@@ -625,8 +670,8 @@
     },
     {
       "path": "src/researchConversation.ts",
-      "bytes": 4057,
-      "sha256": "252fa5ff71233c30768474961761615754e7e7b5b66c07780cf2d430076b0abe"
+      "bytes": 4517,
+      "sha256": "dc6914a6e20647bbfe614c1fa9fa3ce5c555e11d5cca173d3a74a174dcede9ed"
     },
     {
       "path": "src/scientificNotation.ts",
@@ -637,6 +682,11 @@
       "path": "src/styles.css",
       "bytes": 3358,
       "sha256": "b6f108d4577750958bba5da17207e9da401ff9d61353db6944183a01846dc19b"
+    },
+    {
+      "path": "src/useReports.ts",
+      "bytes": 3826,
+      "sha256": "bb614cbd5a593759d58c0f8d0902e16f9037f5dbb270cbb2a2493d065532093c"
     },
     {
       "path": "src/vite-env.d.ts",
@@ -657,6 +707,11 @@
       "path": "src/workspaceState.ts",
       "bytes": 700,
       "sha256": "25a1093dbdbd190be0f9181794f719d08d48123b1790cc0060f190940af5a934"
+    },
+    {
+      "path": "tests/report-workspace.test.mjs",
+      "bytes": 5515,
+      "sha256": "8f3e9cf1850876b4482ed1a15c0e6df5d8f1df6cf31eb6c4120a937934b268a9"
     },
     {
       "path": "tests/research-answer.test.mjs",
@@ -769,6 +824,11 @@
       "sha256": "ceebe4089cdd0a11b11efcfea831af11552be49f2b5c35968c0b86f7eefde5fa"
     },
     {
+      "path": "tests/test_reports.py",
+      "bytes": 12924,
+      "sha256": "a0f7817b77054fa7c79d8d6e411656dcf5438e9023962bf3426f2008fe7fd1b3"
+    },
+    {
       "path": "tests/test_research_answers.py",
       "bytes": 14507,
       "sha256": "05b67466902904ae5a0a9d331748c341b5cad5810f03fa7a7d69c702f33fc728"
@@ -863,13 +923,13 @@
   "visibility": "private",
   "bootstrap_admin": "Read BOOTSTRAP_ADMIN_EMPLOYEE_ID from the untracked .env; local-only demo identity when unset.",
   "validation": {
-    "backend_tests": 332,
-    "frontend_tests": 32,
+    "backend_tests": 345,
+    "frontend_tests": 38,
     "frontend_build": "TypeScript and Vite production build passed; refreshed tracked dist assets.",
     "external_model_calls": false,
     "conversation_browser_check": "Actual localhost preview: multiline composer, real streamed stage, follow-up, and prior-answer ID saved in the subsequent trace. LLM unconfigured; evidence-only fallback, no generated answer claimed. Fixed proxy Origin/Host mismatch. Test conversation moved to browser trash.",
     "database_concurrency_tests": 14,
-    "test_detail": "32 frontend tests, TypeScript and Vite production build passed. Re-ran 8 isolated conversation backend tests for prior context, ownership, progress and cancellation. The unchanged backend had 332 passing tests in the preceding release. No internal model API calls.",
+    "test_detail": "345 backend regression tests passed in isolated diagnostics. Re-ran 21 report/conversation tests after terminology and source-title changes. All 38 frontend tests, TypeScript and Vite production build passed.",
     "slow_inference_tests": 16,
     "adaptive_wiki_tests": 20,
     "wiki_usage_tests": 13,
@@ -881,6 +941,9 @@
     "wiki_retry_tests": 10,
     "wiki_bulk_retry_tests": 9,
     "conversation_backend_tests": 8,
-    "conversation_composer_tests": 5
+    "conversation_composer_tests": 5,
+    "report_backend_tests": 13,
+    "report_frontend_tests": 6,
+    "report_browser_check": "Isolated synthetic database and deterministic test model: selected section edit, observed progress, preserved other sections, citation snapshot, immutable version preview/restore and HTML download verified. No internal model API calls."
   }
 }

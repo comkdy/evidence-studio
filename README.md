@@ -37,6 +37,7 @@ Copy-Item .env.example .env
 
 - PDF text 추출 → 문맥 chunking → keyword/vector 검색·reranking → 근거 기반 심층 답변.
 - 앞선 대화를 참고하는 후속 질문, 실제 처리 단계 표시, 답변 중지와 대화 다시 열기.
+- 대화 옆 보고서의 구간 선택·부분 수정·출처 확인·버전 복원·HTML 다운로드. [사용 방법](docs/REPORT_AUTHORING.md)
 - 공통·전문가별 Markdown Wiki 작성, 관련 변경 반영, 이력·목차·lint.
 - 전문가 생성·수정·삭제, 논문 분류 필터, 자료 검토·수정 제안, 용어 사전, 사용자 권한.
 

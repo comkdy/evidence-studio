@@ -83,6 +83,8 @@ def answer(request, llm=None):
     from .terminology import snapshot as term_snapshot, prompt_rules, prompt_text, query_rules
     checkpoint()
     conversation = conversation_context(getattr(request, 'history_run_ids', []))
+    from .report_store import focus_context
+    conversation += focus_context(getattr(request, "report_id", None), getattr(request, "report_section_id", None), getattr(request, "report_revision", None))
     stage('context', '앞선 대화의 주제와 질문 범위를 확인했습니다.')
     start = time.monotonic()
     max_seconds = load_ai_settings().limits.research_timeout_seconds
