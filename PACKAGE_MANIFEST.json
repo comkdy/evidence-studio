@@ -374,19 +374,19 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
-      "path": "dist/assets/index-BSzDipYX.css",
-      "bytes": 83051,
-      "sha256": "eb4401f8ab58d9a080cb944d4d81c6ef2b2ca746f22fc875f94a354f70521c34"
-    },
-    {
-      "path": "dist/assets/index-PpSxMHcI.js",
+      "path": "dist/assets/index-gdyhhNZ5.js",
       "bytes": 512590,
       "sha256": "323297ac24183fcb3cf7410d5424eeba7b971b9f1c940baba9302b4aeb214e27"
     },
     {
+      "path": "dist/assets/index-pQlSTGox.css",
+      "bytes": 83422,
+      "sha256": "a1ca29a23d0e9eb9296727f10bc0b171d679ed6992c260165185d47e6980d414"
+    },
+    {
       "path": "dist/index.html",
       "bytes": 848,
-      "sha256": "d1dc03212c5606491fce38ca983896d426913ca76268c92d5d3203692e703f07"
+      "sha256": "c10ca49f133999e16907e97f92fc3054de9cf381812f895ad5699a04a6ecf1cf"
     },
     {
       "path": "docs/DATABASE_PLAN.md",
@@ -575,8 +575,8 @@
     },
     {
       "path": "src/ReportWorkspace.css",
-      "bytes": 10443,
-      "sha256": "0b2d91e2a83eff78f4ba7c4de45a30c61cb14b489c6c6fa874eb7d2e8201c9be"
+      "bytes": 10815,
+      "sha256": "53d366d9750cc1d8388db5ddc213191a83e6a08fee6d813b092a47a1613f0fcd"
     },
     {
       "path": "src/ResearchAnswerView.tsx",
@@ -944,6 +944,6 @@
     "conversation_composer_tests": 5,
     "report_backend_tests": 13,
     "report_frontend_tests": 6,
-    "report_browser_check": "Isolated synthetic database and deterministic test model: selected section edit, observed progress, preserved other sections, citation snapshot, immutable version preview/restore and HTML download verified. No internal model API calls."
+    "report_browser_check": "Isolated synthetic database and deterministic test model: selected section edit, observed progress, preserved other sections, citation snapshot, immutable version preview/restore and HTML download verified. No internal model API calls. Short-height desktop layout keeps composer options accessible; responsive narrow-screen tabs preserved."
   }
 }
