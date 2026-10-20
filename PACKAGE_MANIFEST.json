@@ -1,6 +1,6 @@
 {
   "app": "Evidence Studio",
-  "release": "github-report-authoring-2026-10-15",
+  "release": "github-shared-model-settings-2026-10-20",
   "database": "Absent; schema and baseline settings initialize on first launch.",
   "wiki": "Empty; documents are regenerated after ingest.",
   "raw_pdf_count": 0,
@@ -20,8 +20,8 @@
   "files": [
     {
       "path": ".env.example",
-      "bytes": 4075,
-      "sha256": "1f6a4646a0acd03a2b804d6bd003b8c9b5e46099355a946d57dbf37065385bc2"
+      "bytes": 1626,
+      "sha256": "060c73098d2727c7aeeeb916b93887df4f85cf3d97ea300084cf83fee7f280a2"
     },
     {
       "path": ".gitattributes",
@@ -35,8 +35,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 5415,
-      "sha256": "db87cf20e9d994ecfea8508132ebb449e031758f497c4515a5b5cb82014367bc"
+      "bytes": 5512,
+      "sha256": "3ac5c6659fd10b7ea5da284b7eaf01cb19a39ec909f1c39da6b8972f73135f88"
     },
     {
       "path": "backend/__init__.py",
@@ -50,8 +50,8 @@
     },
     {
       "path": "backend/ai_settings.py",
-      "bytes": 4693,
-      "sha256": "9edbcfd8caf7b1f959ee0547650bf64984844673efc0531e95a7066fb7b7ff1b"
+      "bytes": 5386,
+      "sha256": "a2605a38ddd37c01d9ec4db3e091bdb86b3c80bca8a3a0c3dcad282f07a8ec1d"
     },
     {
       "path": "backend/answer_evidence.py",
@@ -100,8 +100,8 @@
     },
     {
       "path": "backend/diagnostics.py",
-      "bytes": 12302,
-      "sha256": "b843541cd2f72d011a52c525caea63f3366680cdb620d08440554cc09ae98951"
+      "bytes": 12301,
+      "sha256": "846de6fa2a915d0abfd6edf42f26c3c7e8d77cace84fff61b26915df91cca073"
     },
     {
       "path": "backend/embedding_adapter.py",
@@ -389,14 +389,19 @@
       "sha256": "c10ca49f133999e16907e97f92fc3054de9cf381812f895ad5699a04a6ecf1cf"
     },
     {
+      "path": "docs/CONFIGURATION.md",
+      "bytes": 6676,
+      "sha256": "a408965ca02f332d46d7e6d1e173fdfba936f5d66b01281a34a77ffc2e5bc12e"
+    },
+    {
       "path": "docs/DATABASE_PLAN.md",
       "bytes": 6317,
       "sha256": "964c7f518df47b38b3ef4380bd1b03542d1ec7b0a97c27372a45df2db00370d1"
     },
     {
       "path": "docs/DIAGNOSTICS.md",
-      "bytes": 9259,
-      "sha256": "0114ce5e90c90a4921b359fe1e41e3e0de1427e8071a887a5abe5469f3fb2157"
+      "bytes": 9420,
+      "sha256": "c36b57e6233b9077fdce7e5248efd08369c4ea73d69eb616e226f9082444357d"
     },
     {
       "path": "docs/EXPERT_KNOWLEDGE_PLAN.md",
@@ -410,8 +415,8 @@
     },
     {
       "path": "docs/HANDOFF.md",
-      "bytes": 29514,
-      "sha256": "bc87200392ee505b38208e3c52431670741e76f0fb24e59a2ac8e7edb20735a0"
+      "bytes": 29449,
+      "sha256": "9ad7b6e27f9bb728486a3fcd5ce62a5cfee8ff31f06d287fe1500e2e858f83bb"
     },
     {
       "path": "docs/MARKDOWN_WIKI.md",
@@ -740,8 +745,8 @@
     },
     {
       "path": "tests/test_ai_settings.py",
-      "bytes": 4627,
-      "sha256": "8a16d3b44961d478af3766ee0f767eaf4ba09521a4182ff2752aec2e0eaa0510"
+      "bytes": 8428,
+      "sha256": "a53292f081a2fc58c91050679cf476f4db466a6c14fd0f69cf6f70efd90bea87"
     },
     {
       "path": "tests/test_answer_evidence.py",
@@ -755,8 +760,8 @@
     },
     {
       "path": "tests/test_app_routes.py",
-      "bytes": 2263,
-      "sha256": "65775941f4b5a9422cc65be936a78c98efe36d4ca1b6882bfcb61c6b2c6fa411"
+      "bytes": 2268,
+      "sha256": "b7c727aa567dfcaeb936d2f179fd4e9ce0493662bb4a97174fb354cf4a371346"
     },
     {
       "path": "tests/test_auth.py",
@@ -780,13 +785,13 @@
     },
     {
       "path": "tests/test_diagnostics.py",
-      "bytes": 11866,
-      "sha256": "079a2bcc138459fcef899bd83e28b05b613a5296c867d210c7fedeec034c8892"
+      "bytes": 13576,
+      "sha256": "c3dbff5d2692e8d37fb3b5ba5f22982a5cbabc96f96c65bd920836be9df23944"
     },
     {
       "path": "tests/test_expert_knowledge_inventory.py",
-      "bytes": 8667,
-      "sha256": "62f7a27f445e8d33239126daf57a1c9b4471bef8d9f2969424597be2e6bf831c"
+      "bytes": 8672,
+      "sha256": "e35cac3dfadfad1240b6c4a1ea886a1ccf3e43a66f4e5516e351af41ad56f398"
     },
     {
       "path": "tests/test_feature_connections.py",
@@ -800,8 +805,8 @@
     },
     {
       "path": "tests/test_markdown_wiki.py",
-      "bytes": 25864,
-      "sha256": "b7baa0d92f39ea2e22ca21ea8d75cc0a41a899addc5a7786e7dc521fde29ffbb"
+      "bytes": 25869,
+      "sha256": "edace4a14ddcc6fe597fa713d42d9dfe57ab7da6ba3cad0deb489711c876a7e1"
     },
     {
       "path": "tests/test_page_review.py",
@@ -815,8 +820,8 @@
     },
     {
       "path": "tests/test_processing.py",
-      "bytes": 8501,
-      "sha256": "bd92e9db09b3296901a11f1b8fca6de4b721dfe72aef038a318cab47412c9188"
+      "bytes": 8506,
+      "sha256": "7e7b7526ad8c8d11b7ef044e8b22200e3d90987fe5e16a05cbe1d8d17485ed2b"
     },
     {
       "path": "tests/test_quote_matching.py",
@@ -875,8 +880,8 @@
     },
     {
       "path": "tests/test_wiki_packing.py",
-      "bytes": 16571,
-      "sha256": "edc46dc6250f569691016c3953399f8310f37391fc0a56ac751e6b2b2939d867"
+      "bytes": 16501,
+      "sha256": "b1bb82a4627dda6141a2be3cc7827602f6326eafa25da32a3ceaa8381de5b5ab"
     },
     {
       "path": "tests/test_wiki_retry.py",

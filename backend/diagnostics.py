@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from dotenv import dotenv_values
+from .ai_settings import read_ai_environment
 from .diagnostic_report import write_report
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,7 +33,7 @@ STEPS = {
 LIVE_STEPS = {'llm','llm-light','embedding','reranker','wiki','answer'}
 # Explicit empty overrides prevent the project's real .env from leaking into
 # offline stages, even if a production helper loads it independently.
-DEFAULTS = dict.fromkeys('''LLM_BASE_URL LLM_MODEL LLM_API_KEY LLM_LIGHT_BASE_URL LLM_LIGHT_MODEL LLM_LIGHT_API_KEY
+DEFAULTS = dict.fromkeys('''LLM_BASE_URL LLM_BASE_MODEL LLM_MODEL LLM_API_KEY LLM_LIGHT_BASE_URL LLM_LIGHT_MODEL LLM_LIGHT_API_KEY
 LLM_TOKENIZER_PATH LLM_LIGHT_TOKENIZER_PATH EMBEDDING_BASE_URL EMBEDDING_MODEL EMBEDDING_API_KEY
 EMBEDDING_ENDPOINT EMBEDDING_CA_BUNDLE EMBEDDING_CONTRACT_PATH EMBEDDING_MODEL_REVISION EMBEDDING_INPUT_PREFIX
 CHUNK_TOKENIZER_PATH RERANKER_BASE_URL RERANKER_MODEL'''.split(), '')
@@ -47,14 +47,14 @@ DEFAULTS.update(LLM_CONTEXT_TOKENS='16384', LLM_LIGHT_CONTEXT_TOKENS='16384', WI
 
 
 def child_environment(env_file, sandbox, *, live, step=None):
-    values = {**dotenv_values(env_file, encoding='utf-8-sig', interpolate=False), **os.environ} if live else {}
+    values = read_ai_environment(env_file) if live else {}
     env = dict(os.environ)
     def relevant(key):
         if step in (None,'wiki','answer'):return True
         if step in ('llm','llm-light'):
             return (key.startswith('LLM_') or key=='WIKI_OUTPUT_TOKENS') and (step=='llm-light' or not key.startswith('LLM_LIGHT_'))
         if step in ('embedding','chunking'):return key.startswith(('EMBEDDING_','CHUNK','SEMANTIC_'))
-        if step=='reranker':return key.startswith('RERANKER_') or key=='EMBEDDING_API_KEY'
+        if step=='reranker':return key.startswith('RERANKER_') or key in ('EMBEDDING_BASE_URL','EMBEDDING_API_KEY')
         return False
     env.update({key: str(values.get(key) if relevant(key) and values.get(key) is not None else default) for key, default in DEFAULTS.items()})
     env.update(EVIDENCE_DB_PATH=str(sandbox/'diagnostic.sqlite3'), AUTH_MODE='local_admin',

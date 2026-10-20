@@ -22,7 +22,7 @@ class ProcessingTests(unittest.TestCase):
         self.root=Path(self.tmp.name);self.raw=self.root/'raw';self.raw.mkdir()
         self.db=self.root/'pilot.sqlite3'
         self.env=patch.dict(os.environ,{'EVIDENCE_DB_PATH':str(self.db),'AUTH_MODE':'local_admin',
-            'LLM_BASE_URL':'','LLM_API_KEY':'','LLM_MODEL':'','EMBEDDING_BASE_URL':'',
+            'LLM_BASE_URL':'','LLM_API_KEY':'','LLM_BASE_MODEL':'','EMBEDDING_BASE_URL':'',
             'EMBEDDING_API_KEY':'','EMBEDDING_MODEL':'','RERANKER_BASE_URL':''})
         self.env.start();initialize(self.db)
         self.scanner=RawScanner(self.raw,self.db)

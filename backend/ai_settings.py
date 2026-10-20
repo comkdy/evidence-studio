@@ -13,6 +13,21 @@ from pydantic import SecretStr
 ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 
+def read_ai_environment(env_file=None, environ=None):
+    """Normalize aliases within each source before applying environment precedence."""
+    def normalized(source):
+        values = dict(source)
+        if "LLM_BASE_MODEL" not in values and "LLM_MODEL" in values:
+            values["LLM_BASE_MODEL"] = values["LLM_MODEL"]
+        return values
+
+    return {
+        **normalized(dotenv_values(env_file if env_file is not None else ENV_FILE,
+                                   encoding="utf-8-sig", interpolate=False)),
+        **normalized(os.environ if environ is None else environ),
+    }
+
+
 @dataclass(frozen=True)
 class ModelSettings:
     base_url: str
@@ -51,11 +66,7 @@ def load_ai_settings(
     Interpolation is disabled so a key containing ${...} stays literal. This
     function does not modify os.environ or expose settings via an HTTP route.
     """
-    values = {
-        **dotenv_values(env_file if env_file is not None else ENV_FILE,
-                        encoding="utf-8-sig", interpolate=False),
-        **(os.environ if environ is None else environ),
-    }
+    values = read_ai_environment(env_file, environ)
 
     def value(name: str) -> str:
         return (values.get(name) or "").strip()
@@ -69,23 +80,30 @@ def load_ai_settings(
         except ValueError:
             raise ValueError(f"{name} must be an integer between {low} and {high}") from None
 
-    llm = ModelSettings(value("LLM_BASE_URL"), value("LLM_MODEL"), SecretStr(value("LLM_API_KEY")),
+    def shared_only(legacy, shared, *, url=False):
+        previous, current = value(legacy), value(shared)
+        if url:
+            previous, current = previous.rstrip('/'), current.rstrip('/')
+        if previous and previous != current:
+            raise ValueError(f"{legacy} is no longer independent; remove it and configure {shared}")
+
+    llm = ModelSettings(value("LLM_BASE_URL"), value("LLM_BASE_MODEL"), SecretStr(value("LLM_API_KEY")),
         integer("LLM_CONTEXT_TOKENS", 16384, 4096, 1048576), value("LLM_TOKENIZER_PATH"))
     light = None
     if value("LLM_LIGHT_MODEL"):
-        light_url = value("LLM_LIGHT_BASE_URL") or llm.base_url
-        # Never send the main key to a separately configured endpoint implicitly.
-        light_key = value("LLM_LIGHT_API_KEY") or (llm.api_key.get_secret_value()
-            if light_url.rstrip("/") == llm.base_url.rstrip("/") else "")
-        if not light_url or not light_key:
-            raise ValueError("LLM_LIGHT_MODEL requires an endpoint and API key; a different endpoint needs LLM_LIGHT_API_KEY")
-        light = ModelSettings(light_url, value("LLM_LIGHT_MODEL"), SecretStr(light_key),
+        shared_only("LLM_LIGHT_BASE_URL", "LLM_BASE_URL", url=True)
+        shared_only("LLM_LIGHT_API_KEY", "LLM_API_KEY")
+        if not llm.base_url or not llm.api_key.get_secret_value():
+            raise ValueError("LLM_LIGHT_MODEL requires LLM_BASE_URL and LLM_API_KEY")
+        light = ModelSettings(llm.base_url, value("LLM_LIGHT_MODEL"), llm.api_key,
             integer("LLM_LIGHT_CONTEXT_TOKENS", 16384, 4096, 1048576), value("LLM_LIGHT_TOKENIZER_PATH"))
     output_tokens = integer("WIKI_OUTPUT_TOKENS", 2048, 256, 16384)
     if any(output_tokens + 1024 >= s.context_tokens for s in (llm, light) if s):
         raise ValueError("WIKI_OUTPUT_TOKENS must leave room for Wiki instructions and evidence in each model context")
-    embedding = ModelSettings(value("EMBEDDING_BASE_URL"), value("EMBEDDING_MODEL"), SecretStr(value("EMBEDDING_API_KEY")))
-    reranker = ModelSettings(value("RERANKER_BASE_URL"), value("RERANKER_MODEL"), embedding.api_key)
+    embedding = ModelSettings(value("EMBEDDING_BASE_URL").rstrip("/"), value("EMBEDDING_MODEL"), SecretStr(value("EMBEDDING_API_KEY")))
+    if value("RERANKER_MODEL"):
+        shared_only("RERANKER_BASE_URL", "EMBEDDING_BASE_URL", url=True)
+    reranker = ModelSettings(embedding.base_url, value("RERANKER_MODEL"), embedding.api_key)
     def seconds(name, default, upper=1800):
         try:
             result = float(value(name) or default)

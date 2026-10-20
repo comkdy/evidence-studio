@@ -30,7 +30,7 @@ class ExpertKnowledgeInventoryTests(unittest.TestCase):
         fixtures.PilotTests.setUp(self)
         self.env = patch.dict(os.environ, {
             'EVIDENCE_DB_PATH': str(self.db), 'AUTH_MODE': 'local_admin',
-            'LLM_BASE_URL': '', 'LLM_API_KEY': '', 'LLM_MODEL': '',
+            'LLM_BASE_URL': '', 'LLM_API_KEY': '', 'LLM_BASE_MODEL': '',
             'EMBEDDING_BASE_URL': '', 'EMBEDDING_API_KEY': '',
             'EMBEDDING_MODEL': '', 'RERANKER_BASE_URL': '',
         })

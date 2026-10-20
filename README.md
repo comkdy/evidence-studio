@@ -8,6 +8,7 @@ GitHub로 받는 경우: [clone·pull 및 실행 안내](docs/GITHUB_TRANSFER.md
 
 - 팀 소개: [Evidence Studio 소개 HTML](docs/evidence-studio-introduction.html) — 인터넷 연결 없이 브라우저로 열 수 있습니다.
 - 설치·연결·재구축: [사내 이관 안내](docs/HANDOFF.md)
+- 공유 URL·키, 모델별 설정, .env 변경 방법: [설정 안내](docs/CONFIGURATION.md)
 - 단계별 실행·실제 API 점검·HTML 보고서: [사내 점검 도구](docs/DIAGNOSTICS.md)
 - 지식 작성 원칙: [공통 작성 지침](backend/prompts/wiki_policy.md)
 

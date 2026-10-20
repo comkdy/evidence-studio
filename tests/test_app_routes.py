@@ -17,7 +17,7 @@ class ApplicationRouteTests(unittest.TestCase):
             'EVIDENCE_DB_PATH': str(Path(self.tmp.name) / 'empty.sqlite3'),
             'AUTH_MODE': 'local_admin',
             'BOOTSTRAP_ADMIN_EMPLOYEE_ID': '9000001',
-            'LLM_BASE_URL': '', 'LLM_MODEL': '', 'LLM_API_KEY': '',
+            'LLM_BASE_URL': '', 'LLM_BASE_MODEL': '', 'LLM_API_KEY': '',
         })
         self.env.start()
         initialize()

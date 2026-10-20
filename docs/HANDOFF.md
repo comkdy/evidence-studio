@@ -49,9 +49,9 @@ Copy-Item .env.example .env
 
 | 설정 | 입력 / 현재 계약 |
 |---|---|
-| `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` | Chat Completions. `messages` 전송, `choices[0].message.content` 응답. 모델은 프롬프트가 지정한 JSON 객체를 반환해야 함 |
+| `LLM_BASE_URL`, `LLM_BASE_MODEL`, `LLM_API_KEY` | Chat Completions. `messages` 전송, `choices[0].message.content` 응답. 모델은 프롬프트가 지정한 JSON 객체를 반환해야 함 |
 | `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_API_KEY` | `/embedding`을 포함한 전체 URL. Bearer 인증, `{input: text, model: model}`, `data[0].embedding`. 현재 한 문자열씩 전송 |
-| `RERANKER_BASE_URL`, `RERANKER_MODEL` | 전체 URL. `EMBEDDING_API_KEY` 재사용. `{model, query, documents}` → `results[{index,relevance_score}]` 또는 `[{index,score}]`. 실제 사내 계약과 비교 필요 |
+| `RERANKER_MODEL` | `EMBEDDING_BASE_URL`과 `EMBEDDING_API_KEY` 재사용. 동일한 전체 URL에 POST. `{model, query, documents}` → `results[{index,relevance_score}]` 또는 `[{index,score}]`. 실제 사내 계약과 비교 필요 |
 | `EMBEDDING_MAX_INPUT_TOKENS` | 사내 모델의 입력 한도. 예시값 512를 실제 모델에 맞게 확인 |
 | `CHUNK_TOKENIZER_PATH` | 선택. 사내 모델의 로컬 `tokenizer.json`이 있으면 지정. 빈 값이면 비교용 tokenizer 사용; 실제 모델과 token 수가 다를 수 있음 |
 
@@ -201,8 +201,8 @@ urllib의 timeout은 각 blocking operation에 적용되며 요청 전체에 대
 | 짧은 논문 원문 → 원천 Wiki, 긴 논문 원문 묶음 → 사실·인용 | LLM_LIGHT_MODEL 설정 시 경량 모델, 없으면 기본 모델 |
 | 전체 논문이 기본 모델에는 들어가지만 경량 모델에는 안 들어감 | 분할 대신 기본 모델 1회 |
 | 경량 모델이 지침·최소 근거도 수용하지 못함 | 전송 전에 기본 모델로 분할 계획 |
-| 여러 원천 지식 종합·공통 주제·전문가 특화 노트 | LLM_MODEL |
-| 질문 계획·답변·검증, 내용 lint | LLM_MODEL 유지 |
+| 여러 원천 지식 종합·공통 주제·전문가 특화 노트 | LLM_BASE_MODEL |
+| 질문 계획·답변·검증, 내용 lint | LLM_BASE_MODEL 유지 |
 | 목차·파일·링크·구조 검사 | 코드 실행, LLM 호출 없음 |
 
 경량 모델의 과학적 정확도를 자동으로 보증하지 않습니다. 관리자가 비교 검증한 모델을 선택적으로 지정하는 방식입니다. 인용 검증은 원문 연결을 확인하며, 조건 해석의 타당성까지 보증하지 않습니다. 경량 모델의 timeout/잘못된 응답 뒤 기본 모델로 자동 재호출하지 않습니다. 기존 Wiki를 보존하고 문제를 표시합니다.
@@ -219,11 +219,9 @@ WIKI_OUTPUT_TOKENS=2048
 LLM_LIGHT_MODEL=
 LLM_LIGHT_CONTEXT_TOKENS=16384
 LLM_LIGHT_TOKENIZER_PATH=
-LLM_LIGHT_BASE_URL=
-LLM_LIGHT_API_KEY=
 ~~~
 
-같은 서비스의 다른 모델이면 LLM_LIGHT_MODEL만 지정하고 실제 context 한도를 맞추면 됩니다. 경량 모델 주소가 비어 있으면 기본 주소·키를 재사용합니다. 별도 주소를 지정하면 LLM_LIGHT_API_KEY도 직접 입력해야 하며, 기본 키를 다른 주소에 자동 전송하지 않습니다. 두 모델은 기존 LLM_TIMEOUT_SECONDS와 동시 호출 제한을 공유합니다.
+LLM_BASE_MODEL과 LLM_LIGHT_MODEL은 LLM_BASE_URL·LLM_API_KEY를 공유합니다. 경량 모델을 쓰려면 모델명과 실제 context 한도만 지정합니다. 두 모델은 기존 LLM_TIMEOUT_SECONDS와 동시 호출 제한도 공유합니다. URL·키 통합, 기존 .env 변경 방법, 선택적 튜닝은 [설정 안내](CONFIGURATION.md)를 참고하세요.
 
 context는 모델별 4,096~1,048,576, Wiki 출력은 256~16,384 token 설정을 허용하며 기본값은 각각 16,384 / 2,048입니다. 기본값이 사내 모델의 실제 규격이라는 뜻은 아닙니다. 출력과 512 token의 chat template 여유를 뺀 입력 예산으로 전체 직렬화 요청을 검사합니다. 지침 자체가 너무 크면 전송 전에 실패합니다. 모델이 max_tokens를 지원해야 하며 Wiki 요청에 WIKI_OUTPUT_TOKENS를 전달합니다. finish_reason=length 등 불완전한 출력은 기존처럼 거부합니다.
 

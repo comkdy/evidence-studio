@@ -257,16 +257,16 @@ class WikiBudgetTests(unittest.TestCase):
         budget=WikiBudget(4096,1024)
         with self.assertRaises(WikiError):source_batches(paper,budget,lambda ev:budget.fits('x'*5000,ev))
 
-    def test_model_settings_and_separate_endpoint_do_not_leak_main_key(self):
-        base={'LLM_BASE_URL':'https://main.test/v1','LLM_MODEL':'main','LLM_API_KEY':'main-secret'}
+    def test_shared_model_connection_preserves_independent_context_budgets(self):
+        base={'LLM_BASE_URL':'https://main.test/v1','LLM_BASE_MODEL':'main','LLM_API_KEY':'main-secret'}
         settings=load_ai_settings(Path('absent-env'),environ=base|{'LLM_LIGHT_MODEL':'small'})
         self.assertEqual(settings.light_llm.api_key.get_secret_value(),'main-secret')
         self.assertEqual(settings.light_llm.base_url,settings.llm.base_url)
         self.assertNotIn('main-secret',repr(settings))
-        with self.assertRaisesRegex(ValueError,'LLM_LIGHT_API_KEY'):
+        with self.assertRaisesRegex(ValueError,'LLM_LIGHT_BASE_URL'):
             load_ai_settings(Path('absent-env'),environ=base|{'LLM_LIGHT_MODEL':'small','LLM_LIGHT_BASE_URL':'https://other.test/v1'})
-        settings=load_ai_settings(Path('absent-env'),environ=base|{'LLM_LIGHT_MODEL':'small','LLM_LIGHT_BASE_URL':'https://other.test/v1',
-            'LLM_LIGHT_API_KEY':'light-secret','LLM_LIGHT_CONTEXT_TOKENS':'8192','LLM_CONTEXT_TOKENS':'32768'})
+        settings=load_ai_settings(Path('absent-env'),environ=base|{'LLM_LIGHT_MODEL':'small',
+            'LLM_LIGHT_CONTEXT_TOKENS':'8192','LLM_CONTEXT_TOKENS':'32768'})
         self.assertEqual(settings.llm.context_tokens,32768);self.assertEqual(settings.light_llm.context_tokens,8192)
         with patch('backend.wiki_budget.load_ai_settings',return_value=settings):
             client=CompanyLLM(settings.llm);light=extraction_model(client)

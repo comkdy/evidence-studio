@@ -26,10 +26,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.server.delay:time.sleep(self.server.delay)
         if self.server.error:
             self.send_response(401);self.end_headers();self.wfile.write(b'private-provider-body');return
-        if self.path=='/embedding':
+        if self.path=='/embedding' and 'input' in body:
             vector = [x/128-1 for x in hashlib.sha256(body['input'].encode()).digest()[:16]]
             result = {'data':[{'embedding':vector}]}
-        elif self.path=='/rerank':
+        elif self.path=='/embedding' and 'documents' in body:
             result = {'results':[{'index':i,'relevance_score':.9 if 'dram' in text.lower() else .1} for i,text in enumerate(body['documents'])]}
         else:
             payload = json.loads(body['messages'][1]['content'])
@@ -79,9 +79,9 @@ class DiagnosticTests(unittest.TestCase):
     def settings(self,http):
         url = f'http://127.0.0.1:{http.server_port}'
         # Explicit child-process environment has the same precedence as the app.
-        return dict(LLM_BASE_URL=url,LLM_MODEL='diagnostic-main',LLM_API_KEY='private-model-key',
+        return dict(LLM_BASE_URL=url,LLM_BASE_MODEL='diagnostic-main',LLM_API_KEY='private-model-key',
             LLM_LIGHT_MODEL='diagnostic-small',EMBEDDING_BASE_URL=url+'/embedding',EMBEDDING_MODEL='diagnostic-vector',
-            EMBEDDING_API_KEY='private-vector-key',RERANKER_BASE_URL=url+'/rerank',RERANKER_MODEL='diagnostic-rank')
+            EMBEDDING_API_KEY='private-vector-key',RERANKER_MODEL='diagnostic-rank')
 
     def run_steps(self,steps,**kwargs):
         directory,code = run_checks(steps,output=self.root/'reports',**kwargs)
@@ -96,16 +96,16 @@ class DiagnosticTests(unittest.TestCase):
 
     def test_env_file_precedence_and_step_specific_settings(self):
         env = self.root/'company.env'
-        env.write_text("LLM_MODEL=file-model\nLLM_API_KEY='file-${literal}'\nAUTH_MODE=sso\nEVIDENCE_DB_PATH=wrong.sqlite3\n",encoding='utf-8')
+        env.write_text("LLM_BASE_MODEL=file-model\nLLM_API_KEY='file-${literal}'\nAUTH_MODE=sso\nEVIDENCE_DB_PATH=wrong.sqlite3\n",encoding='utf-8')
         with patch.dict(os.environ,{},clear=True):
             values = child_environment(env,self.root/'isolated',live=True,step='llm')
-        self.assertEqual(values['LLM_MODEL'],'file-model')
+        self.assertEqual(values['LLM_BASE_MODEL'],'file-model')
         self.assertEqual(values['LLM_API_KEY'],'file-${literal}')
         self.assertEqual(values['AUTH_MODE'],'local_admin')
         self.assertEqual(values['EVIDENCE_DB_PATH'],str(self.root/'isolated'/'diagnostic.sqlite3'))
-        with patch.dict(os.environ,{'LLM_MODEL':'process-model'}):
+        with patch.dict(os.environ,{'LLM_BASE_MODEL':'process-model'}):
             values = child_environment(env,self.root/'isolated',live=True,step='llm')
-        self.assertEqual(values['LLM_MODEL'],'process-model')
+        self.assertEqual(values['LLM_BASE_MODEL'],'process-model')
         self.assertEqual(child_environment(env,self.root,live=False)['LLM_API_KEY'],'')
 
     def test_offline_checks_ignore_production_database_and_live_config(self):
@@ -126,8 +126,16 @@ class DiagnosticTests(unittest.TestCase):
             directory,code,report = self.run_steps(['llm','llm-light','embedding','reranker','chunking','wiki','answer'],live=True)
             self.assertEqual(code,0,json.dumps(report,ensure_ascii=False))
             self.assertTrue(http.received)
-            rerank_headers = [header for path,_,header in http.received if path=='/rerank']
+            rerank_headers = [header for path,body,header in http.received if body['model']=='diagnostic-rank']
+            self.assertTrue(rerank_headers)
             self.assertTrue(all(h=='Bearer private-vector-key' for h in rerank_headers))
+            for path,body,header in http.received:
+                if body['model'] in ('diagnostic-main','diagnostic-small'):
+                    self.assertEqual(path,'/chat/completions')
+                    self.assertEqual(header,'Bearer private-model-key')
+                else:
+                    self.assertEqual(path,'/embedding')
+                    self.assertEqual(header,'Bearer private-vector-key')
             text = (directory/'report.json').read_text(encoding='utf-8')+(directory/'report.html').read_text(encoding='utf-8')
             for secret in ('private-model-key','private-vector-key',f'127.0.0.1:{http.server_port}','private-provider-body'):
                 self.assertNotIn(secret,text)
@@ -141,6 +149,24 @@ class DiagnosticTests(unittest.TestCase):
             _,code,report = self.run_steps(['llm'],live=True)
         self.assertEqual(code,1)
         self.assertEqual(report['results'][0]['calls'][0]['total_tokens'],120)
+
+    def test_reranker_only_uses_shared_endpoint_and_key(self):
+        with server() as http,patch.dict(os.environ,self.settings(http)):
+            _,code,report=self.run_steps(['reranker'],live=True)
+            self.assertEqual(code,0,report)
+            self.assertTrue(http.received)
+            self.assertTrue(all(path=='/embedding' and body['model']=='diagnostic-rank'
+                                and header=='Bearer private-vector-key' for path,body,header in http.received))
+
+    def test_legacy_model_alias_is_preserved_by_live_diagnostics_and_cleared_offline(self):
+        env=self.root/'legacy.env'
+        env.write_text('LLM_MODEL=old-model\nLLM_API_KEY=old-key\n',encoding='utf-8')
+        with patch.dict(os.environ,{},clear=True):
+            values=child_environment(env,self.root/'isolated',live=True,step='llm')
+            self.assertEqual(values['LLM_BASE_MODEL'],'old-model')
+            self.assertEqual(child_environment(env,self.root,live=False)['LLM_BASE_MODEL'],'')
+        with patch.dict(os.environ,{'LLM_MODEL':'process-old'},clear=True):
+            self.assertEqual(child_environment(env,self.root,live=True,step='llm')['LLM_BASE_MODEL'],'process-old')
 
     def test_auth_error_does_not_leak_provider_body_or_invent_tokens(self):
         with server(error=True) as http,patch.dict(os.environ,self.settings(http)):

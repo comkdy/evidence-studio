@@ -54,7 +54,7 @@ class MarkdownWikiTests(unittest.TestCase):
     curation=fixtures.PilotTests.curation
     def setUp(self):
         fixtures.PilotTests.setUp(self)
-        self.env=patch.dict(os.environ,{'EVIDENCE_DB_PATH':str(self.db),'EVIDENCE_USER_ROLE':'admin','AUTH_MODE':'local_admin','LLM_BASE_URL':'','LLM_API_KEY':'','LLM_MODEL':'','EMBEDDING_BASE_URL':'','EMBEDDING_API_KEY':'','EMBEDDING_MODEL':'','RERANKER_BASE_URL':''})
+        self.env=patch.dict(os.environ,{'EVIDENCE_DB_PATH':str(self.db),'EVIDENCE_USER_ROLE':'admin','AUTH_MODE':'local_admin','LLM_BASE_URL':'','LLM_API_KEY':'','LLM_BASE_MODEL':'','EMBEDDING_BASE_URL':'','EMBEDDING_API_KEY':'','EMBEDDING_MODEL':'','RERANKER_BASE_URL':''})
         self.env.start()
         target,_=self.curation();apply_curation(target,self.db)
         self.store=WikiStore(self.db)
