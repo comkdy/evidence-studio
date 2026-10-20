@@ -134,7 +134,30 @@ def paper(paper_id:str):
         attach_summaries(db,[result])
         result["pages"]=rows(db.execute("SELECT id,page_number,status,char_count FROM pages WHERE run_id=? ORDER BY page_number",(record["current_run_id"],)))
         result["claims"]=[claim_detail(db,r) for r in db.execute("SELECT * FROM claims WHERE paper_id=? ORDER BY id",(paper_id,)).fetchall()]
-        return result
+        from .knowledge_build import coverage_status
+        coverage=coverage_status(db,paper_ids=[paper_id])['papers'][0]
+        experts=rows(db.execute('''SELECT e.id,e.name,coalesce(p.enabled,1) AS enabled
+            FROM expert_categories e JOIN expert_papers ep ON ep.expert_id=e.id
+            LEFT JOIN expert_policies p ON p.expert_id=e.id
+            WHERE ep.paper_id=? AND e.id NOT IN (SELECT expert_id FROM expert_deletions)
+            ORDER BY e.name''',(paper_id,)))
+    # Structured claims and reviewed source coverage are independent: a paper
+    # can already support reviewed Wiki material before curated claims exist.
+    from .wiki_api import load_catalogue,read_page,item
+    from .wiki_store import WikiError
+    store,state,catalogue=load_catalogue()
+    common=[]
+    for row in sorted(catalogue.values(),key=lambda row:(row['kind']!='source',row['title'],row['id'])):
+        if row['scope']!='common' or row['kind'] not in ('source','topic') or paper_id not in row['refs']['paper_ids']:
+            continue
+        try:
+            common.append(item(read_page(row,store,catalogue),state))
+        except WikiError:
+            # A changed file or dependency is not a usable knowledge link.
+            continue
+    result['knowledge']=dict(coverage=coverage,common_wikis=common,
+                             experts=[dict(expert,enabled=bool(expert['enabled'])) for expert in experts])
+    return result
 
 @router.get("/pages/{page_id}")
 def page(page_id:str):

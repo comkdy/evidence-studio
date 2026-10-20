@@ -21,6 +21,9 @@ from backend.wiki_retrieval import retrieve,rerank
 from backend.llm_client import CompanyLLM,LLMError
 from backend.ai_settings import ModelSettings
 from backend.wiki_policy import load_prompt, POLICY_PATH
+from backend.task_queue import run_next
+from backend.knowledge_build import register_handlers
+from test_knowledge_build import FakeModel as ReviewedBuildModel
 
 
 class FakeLLM:
@@ -63,6 +66,16 @@ class MarkdownWikiTests(unittest.TestCase):
         self.env.stop();fixtures.PilotTests.tearDown(self)
     def sync(self,llm=None):return reconcile(self.db,llm or self.no_llm)
     def source(self):return next(r for r in self.store.rows() if r['kind']=='source')
+    def enable_reviewed_model(self):
+        ReviewedBuildModel.database=self.db;ReviewedBuildModel.approve=True;ReviewedBuildModel.bad_quote=False
+        model=patch('backend.knowledge_build.CompanyLLM',ReviewedBuildModel)
+        model.start();self.addCleanup(model.stop)
+    def drain_demand_work(self):
+        register_handlers()
+        for _ in range(150):
+            if not run_next(self.db,kinds=['knowledge.'+name for name in ('extract','review','publish_source','expert_index','synthesize','review_synthesis','publish_synthesis')]):break
+        else:self.fail('Unexpected unbounded demand work')
+        with connect(self.db) as db:self.assertEqual(db.execute("SELECT count(*) FROM work_tasks WHERE state='failed'").fetchone()[0],0)
 
     def test_migration_keeps_canonical_evidence_and_is_idempotent(self):
         self.sync();before={r['id']:r['content_hash'] for r in self.store.rows()}
@@ -90,18 +103,20 @@ class MarkdownWikiTests(unittest.TestCase):
     def test_requested_specialization_is_scoped_and_not_a_copy_for_every_expert(self):
         llm=FakeLLM();self.sync(llm)
         source=self.source()
+        self.enable_reviewed_model()
         result=request_topic('dram',TopicRequest(title='Refresh trade-offs',source_ids=[source['id']]))
-        self.assertEqual(result['status'],'queued');self.sync(llm)
+        self.assertEqual(result['status'],'queued');self.drain_demand_work()
         self.assertEqual(self.store.record(result['id'])['kind'],'specialization')
         with self.assertRaises(HTTPException):request_topic('nor',TopicRequest(title='Forbidden scope',source_ids=[source['id']]))
 
     def test_new_pdf_enqueues_update_and_adds_grounded_source_wiki(self):
         self.sync();pdf=self.root/'second.pdf';make_pdf(pdf,TEXT+' A second DRAM result was measured at 95 C.')
-        self.assertEqual(ingest_file(pdf,self.db,0)['status'],'ready')
-        result=run_jobs(self.db,FakeLLM());self.assertNotEqual(result.get('status'),'failed')
+        self.enable_reviewed_model()
+        result=ingest_file(pdf,self.db,0)
+        self.assertEqual(result['status'],'ready');self.drain_demand_work()
         sources=[r for r in self.store.rows() if r['kind']=='source']
-        self.assertEqual(len(sources),2)
-        added=next(r for r in sources if not json.loads(r['refs_json'])['claim_ids'])
+        self.assertEqual(len({pid for row in sources for pid in json.loads(row['refs_json'])['paper_ids']}),2)
+        added=next(r for r in sources if result['paper_id'] in json.loads(r['refs_json'])['paper_ids'])
         spans=json.loads(added['refs_json'])['source_spans'];self.assertTrue(spans)
         state=snapshot(self.db)
         for span in spans:
@@ -120,8 +135,13 @@ class MarkdownWikiTests(unittest.TestCase):
         with connect(self.db) as db:
             db.execute("INSERT INTO expert_papers VALUES('nor',?,'manual')",(pid,));db.commit()
         self.sync(llm)
-        for eid in ('dram','nor'):
-            request_topic(eid,TopicRequest(title=eid+' focused note',source_ids=[source['id']]))
+        # This test explicitly covers legacy scoped maintenance. New topic
+        # requests use the reviewed demand queue, tested separately above.
+        with connect(self.db) as db:
+            for eid in ('dram','nor'):
+                db.execute('INSERT INTO wiki_topic_requests VALUES(?,?,?,?,?)',
+                           ('legacy-'+eid,eid,eid+' focused note',json.dumps([source['id']]),now()))
+            db.commit()
         self.sync(llm)
         initial={r['id']:r for r in self.store.rows()}
         llm.calls.clear();reconcile(self.db,llm,scope='expert',expert_id='dram')

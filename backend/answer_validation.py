@@ -1,4 +1,4 @@
-"""Answer-only grounding guards, deliberately separate from Wiki publication.
+"""Grounding guards for answers and source-backed knowledge candidates.
 
 These checks reject missing provenance and invented numeric literals. They do
 not establish scientific truth or prove that a cited experiment is comparable.
@@ -25,6 +25,15 @@ UNITS = {'s': ('time', '1'), 'sec': ('time', '1'), 'second': ('time', '1'), 'sec
          'C': ('celsius', '1'), '°C': ('celsius', '1'), '℃': ('celsius', '1'),
          '%': ('percent', '1'), 'percent': ('percent', '1'), 'nm': ('length', '1e-9'),
          'µm': ('length', '1e-6'), 'μm': ('length', '1e-6'), 'mm': ('length', '.001')}
+# Prefix case is scientific meaning: mA and MA, or ms and Ms, must never
+# collapse. Cover the common SI families so a large uppercase prefix cannot
+# evade the quantity check merely because it was absent from the alias list.
+for _unit, _dimension in {'s':'time','V':'voltage','A':'current','J':'energy',
+                         'W':'power','m':'length','Hz':'frequency','F':'capacitance','Ω':'resistance'}.items():
+    UNITS.setdefault(_unit, (_dimension, '1'))
+    for _prefix, _exponent in {'f':-15,'p':-12,'n':-9,'u':-6,'µ':-6,'μ':-6,
+                              'm':-3,'k':3,'M':6,'G':9,'T':12}.items():
+        UNITS.setdefault(_prefix+_unit, (_dimension, '1e'+str(_exponent)))
 QUANTITY = re.compile('('+NUMBER.pattern+r')\s*('+ '|'.join(re.escape(k) for k in sorted(UNITS, key=len, reverse=True))+r')(?![A-Za-z])')
 
 
@@ -77,6 +86,34 @@ def source_text(ev):
     return '\n'.join(parts)
 
 
+def validate_source_statement(text, sources):
+    """Reject unsupported literals/quantities and explicit condition inventions.
+
+    This is a deterministic guard, not a scientific entailment/comparability
+    proof. Independent content review is still required. Sources should be the
+    cited primary excerpts, not an entire unrelated paper or a generated Wiki.
+    """
+    if not isinstance(text,str) or not isinstance(sources,list) or not sources or any(not isinstance(s,str) for s in sources):
+        raise WikiError('검증할 진술과 원천 근거를 확인해야 합니다.')
+    available = set().union(*(numbers(source) for source in sources))
+    if not numbers(text).issubset(available):
+        raise WikiError('원천 근거에서 확인되지 않은 수치가 포함되어 발행을 보류했습니다.')
+    available_quantities = set().union(*(quantities(source) for source in sources))
+    if not quantities(text).issubset(available_quantities):
+        raise WikiError('원천 근거와 수치·단위 조합이 일치하지 않아 발행을 보류했습니다.')
+    # These phrases assert experimental conditions even without numeric values.
+    # Only explicit aliases are recognized; no temperature or pressure is inferred.
+    condition_aliases = (
+        r'\broom[\s-]*temp(?:erature)?\b|\bambient[\s-]*temp(?:erature)?\b|실온|상온',
+        r'\batmospheric[\s-]*pressure\b|대기압',
+        r'\bvacuum\b|진공',
+        r'\bzero[\s-]*(?:bias|voltage)\b|무바이어스|영[\s-]*바이어스',
+    )
+    for pattern in condition_aliases:
+        if re.search(pattern,text,re.I) and not any(re.search(pattern,source,re.I) for source in sources):
+            raise WikiError('인용 원문에 명시되지 않은 실험 조건이 포함되어 발행을 보류했습니다.')
+
+
 def grounded_sections(result, evidence):
     if not isinstance(result, dict):
         raise WikiError('종합 답변 형식을 확인해야 합니다.')
@@ -100,12 +137,7 @@ def grounded_sections(result, evidence):
                     raise WikiError('Wiki의 연결 근거를 함께 인용해야 합니다.')
             if kind in ('finding', 'synthesis'):
                 sources = [source_text(ev) for ev in primary]
-                available = set().union(*(numbers(text) for text in sources))
-                if not numbers(item['text']).issubset(available):
-                    raise WikiError('원천 근거에서 확인되지 않은 수치가 포함되어 답변을 보류했습니다.')
-                available_quantities = set().union(*(quantities(text) for text in sources))
-                if not quantities(item['text']).issubset(available_quantities):
-                    raise WikiError('원천 근거와 수치·단위 조합이 일치하지 않아 답변을 보류했습니다.')
+                validate_source_statement(item['text'], sources)
             item['kind'] = kind
     return checked
 

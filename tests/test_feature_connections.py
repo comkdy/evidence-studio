@@ -1,4 +1,5 @@
 """HTTP user journeys across expert setup, library, Wiki and research answers."""
+import json
 import os
 import unittest
 from unittest.mock import patch
@@ -19,6 +20,8 @@ from test_pilot import make_pdf, TEXT
 class FeatureConnectionTests(unittest.TestCase):
     curation = fixtures.MarkdownWikiTests.curation
     sync = fixtures.MarkdownWikiTests.sync
+    enable_reviewed_model = fixtures.MarkdownWikiTests.enable_reviewed_model
+    drain_demand_work = fixtures.MarkdownWikiTests.drain_demand_work
 
     def setUp(self):
         # Block service use even during the underlying ingestion fixture setup.
@@ -71,6 +74,10 @@ class FeatureConnectionTests(unittest.TestCase):
             self.assertEqual(raw.status_code, 200)
         paper = self.request('GET', '/papers/'+self.pid)
         self.assertEqual(paper['claims'][0]['measurements'][0]['raw_value'], '74%')
+        self.assertIn(eid,{expert['id'] for expert in paper['knowledge']['experts']})
+        self.assertTrue(paper['knowledge']['common_wikis'])
+        self.assertTrue(all(w['scope']=='common' and w['kind'] in ('source','topic')
+                            for w in paper['knowledge']['common_wikis']))
         pdf = self.client.get('/api/pilot/documents/'+paper['document_id']+'/pdf')
         self.assertEqual(pdf.status_code, 200)
         self.assertTrue(pdf.content.startswith(b'%PDF'))
@@ -109,15 +116,32 @@ class FeatureConnectionTests(unittest.TestCase):
         incoming = self.root/'new-retention.pdf'
         make_pdf(incoming, TEXT.replace('Retention Study', 'Long Retention Study')+
                  '\nThe longretentionmarker experiment tests a separate DRAM array.')
-        self.assertEqual(ingest_file(incoming, self.db, 0)['status'], 'ready')
+        self.enable_reviewed_model()
+        ingested=ingest_file(incoming, self.db, 0)
+        self.assertEqual(ingested['status'], 'ready')
+        with patch('backend.llm_client.CompanyLLM.complete_json',side_effect=AssertionError('Read must not call model')):
+            pending=self.request('GET','/papers/'+ingested['paper_id'])
+        self.assertEqual(pending['claims'],[])
+        self.assertEqual(pending['knowledge']['coverage']['status'],'pending')
+        self.assertEqual(pending['knowledge']['common_wikis'],[])
         library = self.request('GET', '/papers?expert='+eid+'&limit=50')
         self.assertEqual(library['total'], 2)
         with connect(self.db) as db:
-            self.assertTrue(db.execute("SELECT 1 FROM wiki_jobs WHERE state='queued'").fetchone())
-        outcome = run_jobs(self.db, self.no_llm)
-        self.assertNotEqual(outcome.get('status'), 'failed', outcome)
+            self.assertTrue(db.execute("SELECT 1 FROM work_tasks WHERE kind='knowledge.extract' AND state='queued'").fetchone())
+            self.assertFalse(db.execute("SELECT 1 FROM wiki_jobs WHERE state='queued'").fetchone())
+        self.drain_demand_work()
         wiki = self.request('GET', '/wikis?expert='+eid+'&limit=20')
-        self.assertEqual(sum(w['kind'] == 'source' for w in wiki['wikis']), 2)
+        with connect(self.db) as db:
+            sources=[r['refs_json'] for r in db.execute("SELECT refs_json FROM wiki_files WHERE kind='source' AND status='ready'")]
+        self.assertEqual(len({pid for source in sources for pid in json.loads(source)['paper_ids']}),2)
+        self.assertTrue(any(w['kind']=='source' for w in wiki['wikis']))
+        with patch('backend.llm_client.CompanyLLM.complete_json',side_effect=AssertionError('Read must not call model')):
+            reviewed=self.request('GET','/papers/'+ingested['paper_id'])
+        self.assertEqual(reviewed['claims'],[])
+        self.assertGreater(reviewed['knowledge']['coverage']['ready_chunks'],0)
+        self.assertEqual(reviewed['knowledge']['coverage']['review_state'],'model_reviewed_human_pending')
+        self.assertTrue(any(w['kind']=='source' for w in reviewed['knowledge']['common_wikis']))
+        self.assertIn(eid,{expert['id'] for expert in reviewed['knowledge']['experts'] if expert['enabled']})
         result = self.request('POST', '/ask', dict(question='longretentionmarker', expert_ids=[eid]))
         self.assertTrue(result['hits'])
         self.assertTrue(any('longretentionmarker' in hit['text'] for hit in result['hits']))

@@ -11,7 +11,7 @@ from .pilot_db import connect, db_path, initialize
 from .embedding_client import EmbeddingClient, EmbeddingError
 
 
-def check_connection(policy=None):
+def check_connection(policy=None, *, database=None):
     """Explicit opt-in probe using two synthetic sentences, not corpus content."""
     policy = policy or load_chunk_policy()
     if policy.mode != "semantic":
@@ -20,7 +20,8 @@ def check_connection(policy=None):
         "A DRAM cell retains stored charge.", "A NAND device erases a block.")]
     if any(len(policy.splitter(policy.embedding.max_input_tokens).chunks(text)) != 1 for text in texts):
         raise EmbeddingError("Embedding probe exceeds configured input budget")
-    client = EmbeddingClient(policy.embedding)
+    from .wiki_retrieval import GatedEmbeddingClient
+    client = GatedEmbeddingClient(policy.embedding,database)
     vectors = client.embed(texts)
     return {"status": "ok", "api_format": policy.embedding.api_format, "vectors": len(vectors),
             "dimensions": len(vectors[0]), "tokenizer": policy.metadata()["tokenizer"],
@@ -48,6 +49,8 @@ def reindex(path=None):
             if current_ids != run_ids:
                 raise IndexInputsChanged("Corpus changed during index preparation; retry")
             results = [reindex_document(db, plan["run_id"], policy, prepared=plan) for plan in prepared]
+            from .knowledge_build import refresh_local_index
+            refresh_local_index(db)
             if db.execute("PRAGMA foreign_key_check").fetchall():
                 raise ValueError("Foreign key validation failed")
             db.commit()
@@ -64,6 +67,6 @@ if __name__ == "__main__":
     parser.add_argument("--check", action="store_true", help="Probe the configured API with synthetic text; do not read or reindex papers")
     args = parser.parse_args()
     try:
-        print(json.dumps(check_connection() if args.check else reindex(args.db), ensure_ascii=False))
+        print(json.dumps(check_connection(database=args.db) if args.check else reindex(args.db), ensure_ascii=False))
     except EmbeddingError as exc:
         parser.exit(2, str(exc) + "\n")

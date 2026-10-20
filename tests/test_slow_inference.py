@@ -16,6 +16,7 @@ from urllib.error import HTTPError, URLError
 from pydantic import SecretStr
 from backend.ai_settings import InferenceLimits, ModelSettings, load_ai_settings
 from backend.llm_client import CompanyLLM, LLMError, LLMTimeoutError, LLMCapacityError, ModelCallGate
+from backend import task_queue
 from backend.research_progress import ResearchControl, ResearchCancelled, _current
 from backend.pilot_db import connect
 from backend.wiki_engine import scheduled_lint_ready
@@ -84,6 +85,11 @@ class SlowSettingsTests(unittest.TestCase):
 
 class SlowLLMClientTests(unittest.TestCase):
     def setUp(self):
+        self.directory=tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.gate_db=Path(self.directory.name)/'uncreated.sqlite3'
+        path_patch=patch('backend.task_queue.db_path',return_value=self.gate_db)
+        path_patch.start();self.addCleanup(path_patch.stop)
         self.gate = ModelCallGate()
         self.replace_gate = patch("backend.llm_client._model_gate", self.gate)
         self.replace_gate.start()
@@ -163,10 +169,10 @@ class SlowLLMClientTests(unittest.TestCase):
             b=pool.submit(second.complete_json,"system",{"id":2})
             try:
                 deadline=time.monotonic()+2
-                while not self.gate.waiters and time.monotonic()<deadline:time.sleep(0.01)
+                while not task_queue._fallback_waiters and time.monotonic()<deadline:time.sleep(0.01)
                 self.assertEqual(calls,[1])
                 self.assertEqual(self.gate.active,1)
-                self.assertTrue(self.gate.waiters)
+                self.assertTrue(task_queue._fallback_waiters)
             finally:release.set()
             self.assertEqual(a.result(3),{});self.assertEqual(b.result(3),{})
         self.assertEqual(calls,[1,2])
@@ -179,18 +185,18 @@ class SlowLLMClientTests(unittest.TestCase):
             token=_current.set(control)
             try:return queued.complete_json("system",{})
             finally:_current.reset(token)
-        with self.gate.slot(1,time.monotonic()+5), patch("backend.llm_client.build_opener") as opener, ThreadPoolExecutor(1) as pool:
+        with task_queue.model_slot(self.gate_db,deadline=time.monotonic()+5), patch("backend.llm_client.build_opener") as opener, ThreadPoolExecutor(1) as pool:
             future=pool.submit(request)
             try:
                 deadline=time.monotonic()+2
-                while not self.gate.waiters and time.monotonic()<deadline:time.sleep(0.01)
+                while not task_queue._fallback_waiters and time.monotonic()<deadline:time.sleep(0.01)
                 control.cancelled.set()
                 with self.assertRaises(ResearchCancelled):future.result(2)
                 with self.assertRaises(LLMCapacityError):
                     queued.complete_json("system",{},deadline=time.monotonic()+0.03)
                 opener.assert_not_called()
-                self.assertFalse(self.gate.waiters)
-                self.assertEqual(self.gate.active,1)
+                self.assertFalse(task_queue._fallback_waiters)
+                self.assertTrue(task_queue._fallback_active)
             finally:control.cancelled.set()
 
     def test_cancelled_inflight_request_keeps_capacity_until_it_returns(self):
@@ -244,6 +250,7 @@ class SlowResearchTests(unittest.TestCase):
             waits.append(timeout);clock[0]+=120
             return model.complete_json(system,payload)
         with patch("backend.llm_client.time.monotonic",side_effect=lambda:clock[0]), \
+             patch("backend.wiki_answer.CompanyLLM",return_value=client), \
              patch.object(client,"_request_json",side_effect=transport):
             result=answer(Question(question="refresh 74",expert_ids=["dram"]),client)
         self.assertEqual(model.operations,["plan","refine","answer","review"])
@@ -269,6 +276,9 @@ class SlowWikiTests(unittest.TestCase):
     sync=wiki_fixtures.MarkdownWikiTests.sync
 
     def test_scheduled_lint_yields_to_wiki_jobs_and_active_model_calls(self):
+        from backend.wiki_engine import enqueue
+        with connect(self.db) as db:
+            enqueue(db,'explicit fixture maintenance');db.commit()
         self.assertFalse(scheduled_lint_ready(self.db))
         self.sync()
         with connect(self.db) as db:

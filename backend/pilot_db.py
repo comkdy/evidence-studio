@@ -84,6 +84,9 @@ def initialize(path=None):
         db.execute("INSERT OR IGNORE INTO users(employee_id,role,created_at,updated_at) VALUES(?,'admin',?,?)", (admin_id,now(),now()))
         from .terminology import seed
         seed(db)
+        from . import task_queue, knowledge_build, research_requests, knowledge_learning
+        for module in (task_queue,knowledge_build,research_requests,knowledge_learning):
+            module.ensure_schema(db)
         for id, name, overview, tag in (
             ("dram", "DRAM", "DRAM 소자·retention·reliability", "DRAM"),
             ("nand", "NAND · FeNAND", "NAND와 FeNAND의 소자·CIM", "NAND"),
@@ -98,10 +101,8 @@ def initialize(path=None):
             db.execute("INSERT OR IGNORE INTO expert_categories VALUES(?,?,?,?)", (id,name,overview,tag))
         db.commit()
 
-def sync_wiki_memberships(db):
+def sync_wiki_memberships(db, *, expert_id=None,paper_ids=None):
     """Reuse a Wiki topic only when every cited paper belongs to the expert."""
-    from .wiki_engine import enqueue
-    job_id=enqueue(db)
     db.execute("DELETE FROM expert_knowledge_pages WHERE expert_id IN (SELECT expert_id FROM expert_deletions)")
     db.execute("""DELETE FROM expert_knowledge_pages WHERE EXISTS (
       SELECT 1 FROM knowledge_links l JOIN claims c ON c.id=l.claim_id
@@ -113,5 +114,9 @@ def sync_wiki_memberships(db):
       AND EXISTS(SELECT 1 FROM knowledge_links l WHERE l.page_id=k.id)
       AND NOT EXISTS(SELECT 1 FROM knowledge_links l JOIN claims c ON c.id=l.claim_id
         WHERE l.page_id=k.id AND NOT EXISTS(SELECT 1 FROM expert_papers ep WHERE ep.paper_id=c.paper_id AND ep.expert_id=e.id))""")
-    return job_id
+    from .knowledge_build import refresh_local_index,sync_demands,refresh_expert_syntheses
+    refresh_local_index(db,paper_ids)
+    sync_demands(db,expert_id=expert_id,priority=40 if expert_id or paper_ids is not None else 20)
+    refresh_expert_syntheses(db,expert_id=expert_id)
+    return None
 

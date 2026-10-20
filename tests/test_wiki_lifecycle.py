@@ -13,12 +13,23 @@ from backend.pilot_db import connect
 from backend.wiki_engine import reconcile, snapshot, _full_snapshot, base_refs, current, CONTENT_KINDS
 from backend.wiki_api import list_wikis, load_catalogue, request_topic, TopicRequest, recommendations
 from backend.wiki_retrieval import retrieve, reindex
+from backend.task_queue import run_next
+from backend.knowledge_build import register_handlers
 
 
 class WikiLifecycleTests(TestCase):
     curation=pilot_fixtures.PilotTests.curation
     setUp=wiki_fixtures.MarkdownWikiTests.setUp
     tearDown=wiki_fixtures.MarkdownWikiTests.tearDown
+    enable_reviewed_model=wiki_fixtures.MarkdownWikiTests.enable_reviewed_model
+    drain_demand_work=wiki_fixtures.MarkdownWikiTests.drain_demand_work
+
+    def reviewed_topic(self,eid,title,source_id):
+        self.enable_reviewed_model()
+        note=request_topic(eid,TopicRequest(title=title,source_ids=[source_id]))
+        self.drain_demand_work()
+        self.assertIn(note['id'],load_catalogue()[2])
+        return note
 
     def new_expert(self):
         with connect(self.db) as db:
@@ -39,8 +50,10 @@ class WikiLifecycleTests(TestCase):
         self.assertEqual(listed['total'],len(common))
         self.assertTrue(retrieve('retention',[eid],self.db)[0])
         with connect(self.db) as db:
-            self.assertIsNotNone(db.execute("SELECT 1 FROM wiki_jobs WHERE state='queued'").fetchone())
-        llm.calls.clear();reconcile(self.db,llm)
+            self.assertIsNotNone(db.execute("SELECT 1 FROM work_tasks WHERE kind='knowledge.expert_index' AND target=? AND state='queued'",(eid,)).fetchone())
+            self.assertIsNone(db.execute("SELECT 1 FROM wiki_jobs WHERE state='queued'").fetchone())
+        llm.calls.clear();register_handlers()
+        while run_next(self.db,kinds=['knowledge.expert_index']):pass
         self.assertEqual(llm.calls,[])
         self.assertEqual(common,{row['id']:row['content_hash'] for row in self.store.rows() if row['scope']=='common'})
         self.assertIsNotNone(self.store.record('expert-index-'+eid))
@@ -50,8 +63,7 @@ class WikiLifecycleTests(TestCase):
         reconcile(self.db,self.no_llm)
         eid=self.new_expert()['id'];reconcile(self.db,self.no_llm)
         source=next(row for row in self.store.rows() if row['kind']=='source')
-        note=request_topic(eid,TopicRequest(title='Retention experiments',source_ids=[source['id']]))
-        reconcile(self.db,self.no_llm)
+        note=self.reviewed_topic(eid,'Retention experiments',source['id'])
         self.assertTrue(list_wikis(expert=eid)['wikis'])
         self.change(eid,enabled=False)
         self.assertEqual(list_wikis(expert=eid)['total'],0)
@@ -61,29 +73,30 @@ class WikiLifecycleTests(TestCase):
         with self.assertRaises(HTTPException):
             request_topic(eid,TopicRequest(title='Unavailable',source_ids=[source['id']]))
         reconcile(self.db,self.no_llm)
-        self.assertEqual(self.store.record(note['id'])['status'],'archived')
+        self.assertEqual(self.store.record(note['id'])['status'],'ready')
+        self.assertNotIn(note['id'],load_catalogue()[2])
         self.change(eid,enabled=True)
         self.assertGreater(list_wikis(expert=eid)['total'],0)
         reconcile(self.db,self.no_llm)
-        self.assertNotEqual(self.store.record(note['id'])['status'],'archived')
+        self.assertIn(note['id'],load_catalogue()[2])
 
     def test_delete_restore_preserves_common_files_and_specialization_identity(self):
         reconcile(self.db,self.no_llm)
         eid=self.new_expert()['id'];reconcile(self.db,self.no_llm)
         source=next(row for row in self.store.rows() if row['kind']=='source')
-        note=request_topic(eid,TopicRequest(title='Retention interpretation',source_ids=[source['id']]))
-        reconcile(self.db,self.no_llm)
+        note=self.reviewed_topic(eid,'Retention interpretation',source['id'])
         common={row['id']:row['content_hash'] for row in self.store.rows() if row['scope']=='common'}
         removed=delete_expert(eid,ExpertDelete(revision=expert_config(eid)['revision']))
         self.assertEqual(list_wikis(expert=eid)['total'],0)
         reconcile(self.db,self.no_llm)
         archived=self.store.record(note['id'])
-        self.assertEqual(archived['status'],'archived')
+        self.assertEqual(archived['status'],'ready')
+        self.assertNotIn(note['id'],load_catalogue()[2])
         self.assertTrue((self.store.root/archived['path']).is_file())
         restore_expert(eid,ExpertRestore(deleted_at=removed['deleted_at']))
         self.assertGreater(list_wikis(expert=eid)['total'],0)
         reconcile(self.db,self.no_llm)
-        self.assertNotEqual(self.store.record(note['id'])['status'],'archived')
+        self.assertIn(note['id'],load_catalogue()[2])
         self.assertEqual(common,{row['id']:row['content_hash'] for row in self.store.rows() if row['scope']=='common'})
 
     def test_membership_edit_hides_previous_scope_before_worker(self):

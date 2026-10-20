@@ -76,12 +76,14 @@ def validate_lint_finding(item, piece, offset=0):
                 quote=piece[start:end], start_offset=offset+start, end_offset=offset+end)
 
 
-def run_lint(database=None, *, due_only=False, use_llm=True, llm=None):
+def run_lint(database=None, *, due_only=False, use_llm=True, llm=None, max_calls=None, max_review_chars=None):
     from .terminology import snapshot as term_snapshot, prompt_rules, prompt_text
     prompt = load_prompt('lint')
     glossary=term_snapshot(database)
     store = WikiStore(database)
-    llm = llm or CompanyLLM()
+    llm = llm or CompanyLLM(role='lint',database=database)
+    call_limit = MAX_LLM_CALLS if max_calls is None else max(0,min(MAX_LLM_CALLS,max_calls))
+    char_limit = MAX_REVIEW_CHARS if max_review_chars is None else max(0,min(MAX_REVIEW_CHARS,max_review_chars))
     stamp = now()
     # A slow configured model can legitimately exceed the old fixed stale cutoff.
     from .ai_settings import load_ai_settings
@@ -103,7 +105,7 @@ def run_lint(database=None, *, due_only=False, use_llm=True, llm=None):
             (run_id,stamp,None,'running',model, '',report_path,'[]',0))
         checks={r['page_id']:dict(r) for r in db.execute('SELECT * FROM wiki_lint_checks')}
         db.commit()
-    findings = []; checked = 0; eligible = 0; calls=0; review_chars=0
+    findings = []; checked = 0; eligible = 0; calls=0; review_chars=0; model_failed=False
     try:
         state = snapshot(database)
         catalogue = {r['id']:r for r in store.rows()}
@@ -133,7 +135,7 @@ def run_lint(database=None, *, due_only=False, use_llm=True, llm=None):
                     findings.extend(json.loads(old['findings_json']))
                     checked+=1
                     continue
-                if calls>=MAX_LLM_CALLS or review_chars>=MAX_REVIEW_CHARS:
+                if calls>=call_limit or review_chars>=char_limit:
                     continue
                 refs = json.loads(row['refs_json'])
                 claims = [dict(id=c['id'],summary=c['summary'],kind=c['kind'],scope=c['scope'],
@@ -145,13 +147,13 @@ def run_lint(database=None, *, due_only=False, use_llm=True, llm=None):
                 next_offset=start_offset
                 # Long pages resume next cycle; no unseen tail is marked checked.
                 for start in range(start_offset,len(body),14000):
-                    if calls>=MAX_LLM_CALLS or review_chars>=MAX_REVIEW_CHARS:
+                    if calls>=call_limit or review_chars>=char_limit:
                         break
                     piece = body[start:start+14000]
                     rules=prompt_rules(piece,glossary)
                     system=prompt_text(prompt.text,rules)
                     packet_chars=len(piece)+len(json.dumps(claims,ensure_ascii=False))+len(json.dumps(refs['source_spans'],ensure_ascii=False))+len(system)
-                    if review_chars+packet_chars>MAX_REVIEW_CHARS:
+                    if review_chars+packet_chars>char_limit:
                         break
                     calls+=1; review_chars+=packet_chars
                     reply = llm.complete_json(system, dict(wiki=piece,claims=claims,source_quotes=refs['source_spans']))
@@ -174,6 +176,7 @@ def run_lint(database=None, *, due_only=False, use_llm=True, llm=None):
                     **({'code': error.code} if isinstance(error, WikiCitationError) else {}),
                     suggestion='기존 문서를 보존했습니다. 검토 후 다시 점검하세요.'))
                 if isinstance(error,LLMError):
+                    model_failed=True
                     use_llm = False  # Avoid dozens of calls after one connection failure.
         status = 'completed' if checked==eligible else 'partial'
     except Exception:
@@ -181,7 +184,7 @@ def run_lint(database=None, *, due_only=False, use_llm=True, llm=None):
         findings.append(dict(page_id='',severity='error',issue='Wiki 점검을 완료하지 못했습니다.',suggestion='서버 로그 및 파일 상태를 확인하세요.'))
     text = '# Wiki 정기 점검\n\n'+stamp+'\n\n'
     text += '공통 작성 지침 SHA-256: '+prompt.policy_hash+'\n\n'
-    text += f'주기: 24시간 (앱 실행 중) · 유효한 LLM 검토: {checked}/{eligible}개 문서 · 이번 호출: {calls}/{MAX_LLM_CALLS}회\n\n'
+    text += f'주기: 24시간 (앱 실행 중) · 유효한 LLM 검토: {checked}/{eligible}개 문서 · 이번 단계 호출: {calls}/{call_limit}회\n\n'
     text += '변경 문서 우선 · 미변경 문서는 30일 경과 후 순환 점검 · 회차당 입력 60,000자 이내 · 예산 초과 문서는 다음 회차로 이월\n\n'
     if not llm.configured:
         text += '사내 LLM 미설정: 링크·범위·갱신 검사만 수행했습니다. 내용 검토는 대기 중입니다.\n\n'
@@ -192,7 +195,47 @@ def run_lint(database=None, *, due_only=False, use_llm=True, llm=None):
     with connect(database) as db:
         db.execute('UPDATE wiki_lint_runs SET finished_at=?,state=?,fingerprint=?,findings_json=?,llm_checked=? WHERE id=?',
             (now(),status,fingerprint,json.dumps(findings,ensure_ascii=False),checked,run_id)); db.commit()
-    return {'status':status,'findings':len(findings),'llm_checked':checked,'llm_calls':calls,'review_chars':review_chars,'report':str(store.root/'lint.md')}
+    return {'status':status,'findings':len(findings),'llm_checked':checked,'llm_calls':calls,'review_chars':review_chars,'model_failed':model_failed,'report':str(store.root/'lint.md')}
+
+
+
+def enqueue_scheduled_work(db):
+    """Schedule a bounded review chain on the single background dispatcher."""
+    from .task_queue import enqueue_task
+    from .terminology import snapshot as term_snapshot
+    if db.execute("SELECT 1 FROM work_tasks WHERE kind='wiki.lint' AND state IN ('queued','running') LIMIT 1").fetchone():
+        return None
+    database = next(row['file'] for row in db.execute('PRAGMA database_list') if row['name']=='main')
+    llm = CompanyLLM(role='lint',database=database)
+    model = (llm.identity if llm.configured else 'offline')+':rules:'+load_prompt('lint').fingerprint+':terms:'+str(term_snapshot(database)['revision'])
+    previous = db.execute('SELECT created_at,model FROM wiki_lint_runs ORDER BY created_at DESC LIMIT 1').fetchone()
+    if previous and previous['model']==model and datetime.now(timezone.utc)-datetime.fromisoformat(previous['created_at'])<LINT_INTERVAL:
+        return None
+    chain = digest([previous['created_at'] if previous else '',model])
+    return enqueue_task(db,'wiki.lint','scheduled',chain,
+        {'chain':chain,'step':0,'remaining_calls':MAX_LLM_CALLS,'remaining_chars':MAX_REVIEW_CHARS},priority=60)
+
+
+def _scheduled_step(payload,context):
+    from .task_queue import enqueue_task
+    context.check_cancelled()
+    # A run persists each page/offset review before returning. Recovered tasks
+    # use these checks and therefore do not re-review a completed source slice.
+    result = run_lint(context.database,max_calls=1,max_review_chars=payload['remaining_chars'])
+    context.check_cancelled()
+    calls = payload['remaining_calls']-result.get('llm_calls',0)
+    chars = payload['remaining_chars']-result.get('review_chars',0)
+    if result['status']=='partial' and result.get('llm_calls')==1 and not result.get('model_failed') and calls>0 and chars>0:
+        next_payload = dict(payload,step=payload['step']+1,remaining_calls=calls,remaining_chars=chars)
+        with connect(context.database) as db:
+            enqueue_task(db,'wiki.lint','scheduled',digest([payload['chain'],next_payload['step']]),next_payload,priority=60)
+            db.commit()
+    return result
+
+
+def register_handlers():
+    from .task_queue import register_handler
+    register_handler('wiki.lint',_scheduled_step)
 
 
 def adopt(page_id,database=None):
@@ -211,5 +254,9 @@ def adopt(page_id,database=None):
     result=store.publish(page_id,row['path'],row['title'],body,refs,row['input_hash'],scope=row['scope'],
         expert_id=row['expert_id'],kind=row['kind'],status=row['status'],producer='manual-reviewed',reason='manual Markdown edit',adopt=True)
     with connect(database) as db:
-        enqueue(db,'adopted Wiki edit; refresh dependent pages'); db.commit()
+        from .knowledge_build import refresh_local_index,sync_demands,refresh_derived_for_papers
+        refresh_local_index(db,[],wiki_ids=[page_id])
+        sync_demands(db,paper_ids=refs['paper_ids'],owner_type='manual_review',owner_id=page_id,priority=20,reason='사람이 검토한 Wiki 갱신')
+        refresh_derived_for_papers(db,refs['paper_ids'],priority=20)
+        db.commit()
     return {'status':'adopted','id':result['id'],'revision':result['revision']}

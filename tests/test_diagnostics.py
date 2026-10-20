@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -33,20 +34,24 @@ class Handler(BaseHTTPRequestHandler):
             result = {'results':[{'index':i,'relevance_score':.9 if 'dram' in text.lower() else .1} for i,text in enumerate(body['documents'])]}
         else:
             payload = json.loads(body['messages'][1]['content'])
-            def sections(evidence):
+            def sections(evidence, *, knowledge=False):
                 key = next((k for k,e in evidence.items() if e['kind']=='claim'), next(iter(evidence)))
                 ev = evidence[key]
-                quote = {key:ev['text'][:80]} if ev['kind']=='source_text' else {}
-                return {'sections':[{'heading':'Simulation result','statements':[{'kind':'finding',
-                    'text':'The DRAM simulation estimated 25 percent refresh power reduction at 85 C.',
+                text=ev.get('text') or ev.get('claim',{}).get('summary','')
+                found=re.search(r'The DRAM simulation estimated \d+ percent refresh power reduction at \d+ C\.',text)
+                statement=found.group() if found else text[:80]
+                quote = {key:statement} if ev['kind']=='source_text' else {}
+                return {'sections':[{'heading':'Simulation result','statements':[{'kind':('estimated' if found else 'observed') if knowledge else 'finding',
+                    'text':statement,
                     'evidence_ids':[key],'quotes':quote}]}]}
             if 'text' in payload:content = dict(parameter='Refresh power reduction',value=25,unit='%',temperature_c=85,evidence_type='simulation estimate')
             elif 'statements' in payload:content = {'checks':[{'id':s['id'],'verdict':'supported'} for s in payload['statements']]}
+            elif 'candidate' in payload:content = {'approved':True,'issues':[],'common_reuse_approved':False,'common_title':''}
             elif 'queries' in payload:content = {'queries':[],'gaps':[]}
             elif 'experts' in payload and payload.get('evidence'):
                 evidence = payload['evidence']
                 content = {'synthesis':sections(evidence),'answers':[{'expert_id':e['expert_id'],**sections({key:evidence[key] for key in e['evidence_ids']})} for e in payload['experts']]}
-            elif 'page_kind' in payload:content = sections(payload['evidence'])
+            elif 'page_kind' in payload:content = sections(payload['evidence'],knowledge='coverage' in payload)
             else:content = {'queries':[],'gaps':[]}
             result = {'choices':[{'finish_reason':'stop','message':{'content':'{broken' if self.server.invalid else json.dumps(content)}}],
                       'usage':{'prompt_tokens':100,'completion_tokens':20,'total_tokens':120}}
@@ -115,11 +120,54 @@ class DiagnosticTests(unittest.TestCase):
         with server() as http,patch.dict(os.environ,{**self.settings(http),'EVIDENCE_DB_PATH':str(sentinel)}):
             directory,code,report = self.run_steps(['ingest','curation','chunking','llm'])
             self.assertEqual(http.received,[])
-        self.assertEqual(code,2)
+        self.assertEqual(code,2,json.dumps(report,ensure_ascii=False))
         self.assertEqual([r['status'] for r in report['results']],['passed','passed','passed','skipped'])
+        checks={r['name']:r['status'] for r in report['results'][0]['checks']}
+        for name in ('모델 호출 전 원문 검색 가능','전문가 수요와 단계 작업 연결','업로드가 전체 Wiki 갱신을 예약하지 않음'):
+            self.assertEqual(checks[name],'passed')
         self.assertEqual(sentinel.read_bytes(),b'production sentinel')
         self.assertEqual(wiki.read_text(encoding='utf-8'),'keep this wiki')
         self.assertTrue((directory/'report.html').is_file())
+
+    def test_checkpoint_retries_temporary_windows_lock_and_publishes_complete_json(self):
+        from backend.diagnostic_steps import Context
+        ctx=Context('ingest',self.root,False)
+        ctx.result['status']='passed'
+        locked=PermissionError('temporary Windows report lock');locked.winerror=5
+        replace=Path.replace
+        calls=[]
+        def once(source,target):
+            calls.append(source)
+            if len(calls)==1:
+                self.assertEqual(json.loads(target.read_text(encoding='utf-8'))['status'],'running')
+                raise locked
+            return replace(source,target)
+        with patch.object(Path,'replace',autospec=True,side_effect=once),patch('backend.diagnostic_report.time.sleep') as sleep:
+            ctx.save()
+        self.assertEqual(len(calls),2)
+        sleep.assert_called_once()
+        self.assertEqual(json.loads((self.root/'result.json').read_text(encoding='utf-8'))['status'],'passed')
+
+    def test_checkpoint_propagates_isolation_guard_without_retry(self):
+        from backend.diagnostic_steps import Context
+        ctx=Context('ingest',self.root,False)
+        blocked=PermissionError('Diagnostic write outside its isolated directory was blocked')
+        with patch.object(Path,'replace',side_effect=blocked) as replace,patch('backend.diagnostic_report.time.sleep') as sleep:
+            with self.assertRaises(PermissionError):ctx.save()
+        replace.assert_called_once();sleep.assert_not_called()
+        self.assertEqual(json.loads((self.root/'result.json').read_text(encoding='utf-8'))['status'],'running')
+
+    def test_checkpoint_persistent_windows_lock_fails_with_last_report_intact(self):
+        from backend.diagnostic_steps import Context
+        ctx=Context('ingest',self.root,False)
+        ctx.result['status']='passed'
+        locked=PermissionError('persistent Windows report lock');locked.winerror=32
+        with patch.object(Path,'replace',side_effect=locked) as replace,patch('backend.diagnostic_report.time.sleep') as sleep:
+            with self.assertRaises(PermissionError):ctx.save()
+        self.assertEqual(replace.call_count,5)
+        self.assertEqual(sleep.call_count,4)
+        self.assertLess(sum(call.args[0] for call in sleep.call_args_list),1)
+        self.assertEqual(json.loads((self.root/'result.json').read_text(encoding='utf-8'))['status'],'running')
 
     def test_real_http_adapters_and_full_workflows_with_synthetic_server(self):
         with server() as http,patch.dict(os.environ,self.settings(http)):
@@ -143,6 +191,21 @@ class DiagnosticTests(unittest.TestCase):
         self.assertTrue(any(c['service']=='llm-light' for c in calls))
         self.assertTrue(all(c['total_tokens']==120 for c in calls if c['service'].startswith('llm')))
         self.assertTrue(all(c['total_tokens'] is None for c in calls if c['service']=='embedding'))
+
+    def test_role_overrides_are_isolated_offline_and_kept_for_live_wiki(self):
+        values={'LLM_REVIEW_MODEL':'review-fixture','LLM_BACKGROUND_CONTEXT_TOKENS':'32768',
+                'LLM_ANSWER_TOKENIZER_PATH':'private-tokenizer','LLM_REVIEW_RESOURCE_GROUP':'review-fixture',
+                'LLM_BACKGROUND_DEPLOYMENT_REVISION':'fixture-revision','LLM_REVIEW_MAX_OUTPUT_TOKENS':'1024',
+                'LLM_RESOURCE_GROUP':'base-fixture','LLM_DEPLOYMENT_REVISION':'base-revision',
+                'LLM_LIGHT_DEPLOYMENT_REVISION':'light-revision','EMBEDDING_RESOURCE_GROUP':'embed-fixture',
+                'EMBEDDING_DEPLOYMENT_REVISION':'embed-revision','RERANKER_RESOURCE_GROUP':'rank-fixture',
+                'RERANKER_DEPLOYMENT_REVISION':'rank-revision'}
+        with patch.dict(os.environ,values):
+            offline=child_environment(None,self.root,live=False,step='ingest')
+            live=child_environment(None,self.root,live=True,step='wiki')
+        for key,value in values.items():
+            self.assertEqual(offline[key],'')
+            self.assertEqual(live[key],value)
 
     def test_invalid_json_is_failed_but_api_usage_is_recorded(self):
         with server(invalid=True) as http,patch.dict(os.environ,self.settings(http)):

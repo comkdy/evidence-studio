@@ -6,10 +6,10 @@ from .pilot_db import connect, now
 
 
 def save_run(run_id, request, *, model_identity, prompt, evidence, trace, result,
-             elapsed_ms, status='completed'):
+             elapsed_ms, status='completed', database=None):
     owner = current_user()['employee_id']
     encode = lambda value: json.dumps(value, ensure_ascii=False, separators=(',', ':'))
-    with connect() as db:
+    with connect(database) as db:
         db.execute('''INSERT INTO answer_runs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
             run_id, owner, now(), request.question, request.mode, status,
             model_identity, prompt.policy_hash if prompt else '',
@@ -18,9 +18,9 @@ def save_run(run_id, request, *, model_identity, prompt, evidence, trace, result
         db.commit()
 
 
-def read_run(run_id):
+def read_run(run_id, database=None):
     owner = current_user()['employee_id']
-    with connect() as db:
+    with connect(database) as db:
         row = db.execute('SELECT * FROM answer_runs WHERE id=? AND owner_id=?',
                          (run_id, owner)).fetchone()
     if row is None:

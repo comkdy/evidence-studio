@@ -212,6 +212,9 @@ class DatabaseConcurrencyTests(unittest.TestCase):
 
     def test_transient_wiki_lock_requeues_then_resumes(self):
         self.ingest()
+        from backend.wiki_engine import enqueue
+        with connect(self.db) as db:
+            enqueue(db,'explicit fixture maintenance');db.commit()
         with patch("backend.wiki_engine.reconcile", side_effect=sqlite3.OperationalError("database is locked")):
             self.assertEqual(run_jobs(self.db, FakeLLM())["status"], "deferred")
         with connect(self.db) as db:
@@ -223,6 +226,9 @@ class DatabaseConcurrencyTests(unittest.TestCase):
 
     def test_wiki_llm_has_no_writer_lock_and_lease_renews_during_call(self):
         self.ingest()
+        from backend.wiki_engine import enqueue
+        with connect(self.db) as db:
+            enqueue(db,'explicit fixture maintenance');db.commit()
         llm = FakeLLM()
         complete = llm.complete_json
         def slow(system, payload):

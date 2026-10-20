@@ -10,7 +10,7 @@ from backend.pilot_db import connect, now
 from backend.pilot_ingest import ingest_file
 from backend.processing import processing_status
 from backend.wiki_api import retry_failed_wiki_jobs, WikiFailedJobsRetry
-from backend.wiki_engine import run_jobs
+from backend.wiki_engine import enqueue, run_jobs
 from backend.wiki_store import WikiStore, WikiError
 
 ENDPOINT = '/api/pilot/wiki-maintenance/jobs/retry-failed'
@@ -140,6 +140,7 @@ class WikiBulkRetryReuseTests(unittest.TestCase):
             paper = db.execute('SELECT id FROM papers').fetchone()[0]
             db.execute('DELETE FROM paper_topics')
             db.executemany('INSERT INTO paper_topics(paper_id,tag,basis) VALUES(?,?,?)', [(paper, tag, 'test') for tag in ('Alpha', 'Beta')])
+            enqueue(db, 'manual bulk retry fixture')
             db.commit()
         model = FakeLLM(); complete = model.complete_json
         def fail_beta(system, payload):

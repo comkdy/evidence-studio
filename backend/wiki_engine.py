@@ -117,6 +117,10 @@ def current(row, state, catalogue, visiting=None):
     if row['status'] == 'archived':
         return False
     refs = json.loads(row['refs_json'])
+    if 'validation_signature' in refs or ('producer' in row.keys() and row['producer'] in ('demand-extraction-v1','demand-synthesis-v1')):
+        from .knowledge_build import _compiler_signature
+        if refs.get('validation_signature') != _compiler_signature():
+            return False
     eid = row['expert_id']
     if eid and (eid not in state['experts'] or refs['scope_hash'] != state['experts'][eid]['hash']):
         return False
@@ -203,7 +207,8 @@ def render_sections(sections, evidence, path):
                     target = '/api/pilot/documents/' + e['document_id'] + '/pdf#page=' + str(e['page_number'])
                     label = '원문 p. ' + str(e['page_number'])
                 links.append(f'[{escaped(label)}]({target})')
-            lines += ['- ' + escaped(item['text']) + ' (' + ' · '.join(links) + ')', '']
+            classification={'observed':'관측 결과','estimated':'추정 결과','interpretation':'종합 해석','unclassified':'분류 미확인'}.get(item.get('kind'))
+            lines += ['- ' + escaped((classification+' — ' if classification else '')+item['text']) + ' (' + ' · '.join(links) + ')', '']
             for span in item['source_spans']:
                 lines += ['  > ' + escaped(span['quote']), '']
     return '\n'.join(lines)
@@ -270,13 +275,14 @@ def compile_page(store, state, llm, page_id, path, title, evidence, refs, *,
                          expert_id=expert_id, kind=kind, status=status, producer=producer, reason=reason)
 
 
-def source_page(store, state, paper, llm, reason, prompt=None):
+def source_page(store, state, paper, llm, reason, prompt=None, *, guard=None):
     pid = paper['id']
     path = f'common/sources/{pid}.md'
     page_id = 'source-' + pid
     refs = base_refs([pid], state)
     refs['claim_ids'] = [c['id'] for c in paper['claims']]
     if paper['claims']:
+        refs['coverage']={'complete_paper_review':False,'partial':True,'scientific_review':'human_pending','selected_by':'canonical claim·measurement 인용 구간'}
         body = '# ' + escaped(paper['title']) + '\n\n'
         body += '이 문서는 DB에 선별해 등록한 claim·수치·조건과 원문 인용을 재사용합니다. 논문 전체를 빠짐없이 분석한 기록은 아니며, 과학적 내용 검토는 대기 중입니다.\n\n'
         for note in paper['notes']:
@@ -296,7 +302,7 @@ def source_page(store, state, paper, llm, reason, prompt=None):
                 body += f'> {escaped(s["quote"])}\n\n[원문 p. {s["page_number"]}](/api/pilot/documents/{doc}/pdf#page={s["page_number"]})\n\n'
         body += '원문 문자열 대조 완료 · 내용의 타당성은 사람 검토 대상입니다.\n'
         return [store.publish(page_id, path, paper['title'], body, refs, digest([VERSION, paper['hash']]),
-                              kind='source', producer='curated-db-migration', reason=reason)]
+                              kind='source', producer='curated-db-migration', reason=reason,guard=guard)]
     prompt = prompt or load_prompt('compile')
     # Preserve already valid pre-upgrade source trees without an expensive forced rebuild.
     legacy = reusable_source_tree(store,state,llm,paper,prompt)
@@ -463,7 +469,7 @@ def reconcile(database=None, llm=None, reason='knowledge update', heartbeat=lamb
     prompt = load_prompt('compile')
     store = WikiStore(database)
     state = snapshot(database)
-    llm = llm or CompanyLLM()
+    llm = llm or CompanyLLM(role='background',database=database)
     if scope=='expert':
         if expert_id not in state['experts']:
             raise WikiError('삭제되었거나 사용 중지된 전문가는 갱신할 수 없습니다.')
@@ -565,7 +571,7 @@ def reconcile(database=None, llm=None, reason='knowledge update', heartbeat=lamb
         return scope=='all' or (scope=='common' and row['scope']=='common') or (scope=='expert' and row['expert_id']==expert_id)
     with connect(database) as db:
         for r in catalogue.values():
-            if targeted(r) and r['id'] not in valid_ids:
+            if targeted(r) and r['id'] not in valid_ids and not r['producer'].startswith('demand-'):
                 db.execute("UPDATE wiki_files SET status='archived' WHERE id=?", (r['id'],))
                 db.execute('DELETE FROM wiki_fts WHERE page_id=?', (r['id'],))
         db.commit()
@@ -578,7 +584,7 @@ def reconcile(database=None, llm=None, reason='knowledge update', heartbeat=lamb
             'llm_configured':llm.configured, 'retrieval':retrieval}
 
 
-def run_jobs(database=None, llm=None):
+def run_jobs(database=None, llm=None, *, job_id=None, heartbeat=lambda:None):
     owner = uuid4().hex
     stop_renewal = threading.Event()
     lease_lost = threading.Event()
@@ -621,7 +627,7 @@ def run_jobs(database=None, llm=None):
     errors = []
     try:
         with connect(database) as db:
-            if not db.execute("SELECT 1 FROM wiki_jobs WHERE state IN ('queued','running') LIMIT 1").fetchone():
+            if not db.execute("SELECT 1 FROM wiki_jobs WHERE state IN ('queued','running') AND (? IS NULL OR id=?) LIMIT 1",(job_id,job_id)).fetchone():
                 return result
         with write_connection(database) as db:
             lease = db.execute('SELECT * FROM wiki_worker_lease WHERE id=1').fetchone()
@@ -630,11 +636,12 @@ def run_jobs(database=None, llm=None):
             db.execute('INSERT OR REPLACE INTO wiki_worker_lease VALUES(1,?,?)', (owner,time.time()+LEASE_SECONDS))
             recover_runs(db)
             db.execute("UPDATE wiki_jobs SET state='queued' WHERE state='running'")
-            jobs = [dict(r) for r in db.execute("SELECT id,reason,scope,expert_id FROM wiki_jobs WHERE state='queued' ORDER BY id")]
+            jobs = [dict(r) for r in db.execute("SELECT id,reason,scope,expert_id FROM wiki_jobs WHERE state='queued' AND (? IS NULL OR id=?) ORDER BY id",(job_id,job_id))]
         acquired = True
         renewal = threading.Thread(target=keep_lease, name='wiki-lease', daemon=True)
         renewal.start()
         for job in jobs:
+            heartbeat()
             renew()
             with write_connection(database) as db:
                 check_owner(db)
@@ -642,7 +649,10 @@ def run_jobs(database=None, llm=None):
                 active_trace=WikiJobTrace(database,db,job['id'],owner)
             try:
                 with active_trace.capture():
-                    result = reconcile(database, llm, job['reason'], renew, scope=job['scope'], expert_id=job['expert_id'])
+                    def checkpoint():
+                        heartbeat();renew()
+                    result = reconcile(database, llm, job['reason'], checkpoint, scope=job['scope'], expert_id=job['expert_id'])
+                heartbeat()
                 renew()
                 with write_connection(database) as db:
                     check_owner(db)
@@ -697,45 +707,67 @@ def scheduled_lint_ready(database):
         return not db.execute("SELECT 1 FROM wiki_jobs WHERE state IN ('queued','running') LIMIT 1").fetchone()
 
 
+def enqueue_legacy_jobs(db):
+    """Bridge explicit legacy requests into the single background dispatcher."""
+    from .task_queue import enqueue_task
+    ids=[enqueue_task(db,'wiki.legacy_reconcile',str(r['id']),digest(dict(r)),{'legacy_job_id':r['id']},
+                         priority=50,max_attempts=1,revive=True)
+            for r in db.execute("SELECT id,reason,scope,expert_id FROM wiki_jobs WHERE state IN ('queued','running') ORDER BY id").fetchall()]
+    cooldown=db.execute("SELECT result_json FROM knowledge_bootstrap WHERE key='legacy-background-cooldown'").fetchone()
+    until=json.loads(cooldown['result_json']).get('until',0) if cooldown else 0
+    if until>time.time():
+        db.execute("UPDATE work_tasks SET available_at=max(available_at,?) WHERE kind='wiki.legacy_reconcile' AND state='queued'",(until,))
+    return ids
+
+
+def register_legacy_handler():
+    from .task_queue import register_handler,WorkCancelled
+    def run_legacy(payload,context):
+        context.check_cancelled()
+        try:
+            result=run_jobs(context.database,job_id=payload['legacy_job_id'],heartbeat=context.check_cancelled)
+        except WorkCancelled:
+            with connect(context.database) as db:
+                db.execute("UPDATE wiki_jobs SET state='failed',finished_at=?,error=? WHERE id=? AND state IN ('queued','running')",(now(),'작업이 취소되었거나 더 이상 유효하지 않습니다.',payload['legacy_job_id']));db.commit()
+            raise
+        if result.get('retry_after_seconds'):
+            with write_connection(context.database) as db:
+                value=json.dumps({'until':time.time()+result['retry_after_seconds']})
+                db.execute("INSERT INTO knowledge_bootstrap VALUES('legacy-background-cooldown',?,?) ON CONFLICT(key) DO UPDATE SET result_json=excluded.result_json,created_at=excluded.created_at",(value,now()))
+                db.execute("UPDATE work_tasks SET available_at=max(available_at,?) WHERE kind='wiki.legacy_reconcile' AND state='queued'",(json.loads(value)['until'],))
+        if result.get('status') in ('busy','deferred'):raise WorkCancelled('수동 Wiki 갱신을 다음 기회에 이어서 처리합니다.')
+        if result.get('status')=='failed':raise WikiError(result.get('error','Wiki 갱신 실패'))
+        return result
+    register_handler('wiki.legacy_reconcile',run_legacy)
+
+
 def start_worker(database=None):
     database=Path(database or db_path()).resolve()
+    from .knowledge_build import bootstrap_local_state
+    with write_connection(database) as db:
+        bootstrap_local_state(db)
     stop = threading.Event()
     def work():
-        last_policy_check = 0
-        last_prompt_hash = None
         while not stop.is_set():
-            pause = 3
             try:
-                if time.monotonic()-last_policy_check >= 60:
-                    fingerprint = load_prompt('compile').fingerprint
-                    if fingerprint != last_prompt_hash:
-                        with connect(database) as db:
-                            enqueue(db, 'Wiki writing policy checked: '+fingerprint[:12]); db.commit()
-                        last_prompt_hash = fingerprint
-                    last_policy_check = time.monotonic()
-                result = run_jobs(database)
-                pause = result.get('retry_after_seconds',3)
+                # Full reconciliation is an explicit maintenance operation.
+                # Starting the app or editing a model/prompt does not read the
+                # entire corpus through the model again.
+                with connect(database) as db:
+                    enqueue_legacy_jobs(db);db.commit()
             except Exception:
                 # The durable outbox/lease makes interrupted jobs recoverable.
                 import logging
                 logging.getLogger(__name__).exception('Wiki maintenance failed; retrying at next check')
-            stop.wait(pause)
-    def lint_work():
-        from .wiki_lint import run_lint
-        while not stop.wait(60):
-            try:
-                if scheduled_lint_ready(database):
-                    run_lint(database,due_only=True)
-            except Exception:
-                import logging
-                logging.getLogger(__name__).exception('Wiki lint failed; retrying at next check')
+            stop.wait(3)
+    register_legacy_handler()
     thread = threading.Thread(target=work, name='wiki-maintenance', daemon=True)
-    lint_thread = threading.Thread(target=lint_work,name='wiki-lint',daemon=True)
     thread.start()
-    lint_thread.start()
     from .processing import start_ingestion_workers
     ingestion_threads=start_ingestion_workers(stop,database)
-    return stop, (thread,lint_thread,*ingestion_threads)
+    from .task_queue import start_workers
+    demand_threads=start_workers(stop,database)
+    return stop, (thread,*ingestion_threads,*demand_threads)
 
 
 if __name__ == '__main__':

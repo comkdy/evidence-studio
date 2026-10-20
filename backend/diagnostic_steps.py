@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .diagnostics import STEPS, LIVE_STEPS, ROOT
 from .diagnostic_safety import DiagnosticFailure, HTTPMeter
+from .diagnostic_report import replace_report
 
 QUOTE = 'The DRAM simulation estimated 25 percent refresh power reduction at 85 C.'
 TEXT = ('Synthetic DRAM Diagnostic Study\n\nA. Example, B. Example\nDiagnostic Laboratory\n'
@@ -48,7 +49,7 @@ class Context:
         if self.meter:self.result['calls'] = self.meter.calls
         path = self.root/'result.json.tmp'
         path.write_text(json.dumps(self.result,ensure_ascii=False),encoding='utf-8')
-        path.replace(self.root/'result.json')
+        replace_report(path,self.root/'result.json')
 
     def check(self, name, condition, detail=''):
         self.result['checks'].append(dict(name=name,status='passed' if condition else 'failed',detail=detail))
@@ -101,10 +102,16 @@ def unit(ctx):
 def ingest(ctx):
     from .pilot_db import connect
     from .pilot_ingest import ingest_file
-    pdf, _ = ctx.prepare()
+    from .wiki_retrieval import retrieve
+    pdf, pid = ctx.prepare()
     with connect(ctx.db) as db:
         ctx.check('원문 문장 보존',QUOTE in db.execute('SELECT text FROM pages').fetchone()[0])
         ctx.check('검색 chunk 저장',db.execute('SELECT count(*) FROM search_chunks').fetchone()[0]>0)
+        ctx.check('전문가 수요와 단계 작업 연결',bool(db.execute('SELECT 1 FROM knowledge_demands WHERE paper_id=? AND active=1',(pid,)).fetchone())
+            and bool(db.execute("SELECT 1 FROM work_tasks WHERE kind='knowledge.extract' AND state='queued'").fetchone()))
+        ctx.check('업로드가 전체 Wiki 갱신을 예약하지 않음',db.execute('SELECT count(*) FROM wiki_jobs').fetchone()[0]==0)
+    evidence, _ = retrieve('DRAM refresh power reduction',['dram'],ctx.db,local_only=True)
+    ctx.check('모델 호출 전 원문 검색 가능',any(e['kind']=='passage' and pid in json.loads(e['paper_ids_json']) and QUOTE in e['text'] for e in evidence))
     ctx.check('같은 PDF 중복 적재 방지',ingest_file(pdf,ctx.db,0)['status']=='unchanged')
     with connect(ctx.db) as db:ctx.check('논문 1편 유지',db.execute('SELECT count(*) FROM papers').fetchone()[0]==1)
 
@@ -125,11 +132,13 @@ def curation(ctx):
 
 def chunking(ctx):
     from .chunking import load_chunk_policy, build_chunks
+    from .wiki_retrieval import GatedEmbeddingClient
     policy = load_chunk_policy()
     if ctx.live and policy.mode!='semantic':raise unittest.SkipTest('실제 문맥 분할에는 embedding 설정과 semantic/auto 모드가 필요합니다.')
     page = dict(id='synthetic-page',page_number=1,text=TEXT,status='ready')
     audit = []
-    chunks = build_chunks([page],'Synthetic DRAM Diagnostic Study',policy,diagnostics=audit)
+    embedder = GatedEmbeddingClient(policy.embedding,ctx.db) if policy.mode=='semantic' else None
+    chunks = build_chunks([page],'Synthetic DRAM Diagnostic Study',policy,embedder=embedder,diagnostics=audit)
     children = [child for parent in chunks for child in parent['children']]
     ctx.check('문맥 chunk 생성',bool(children),f'{policy.mode} · {len(children)}개 chunk')
     ctx.check('원문 위치와 chunk 일치',all(TEXT[s['start_offset']:s['end_offset']]==c['text'][s['chunk_start']:s['chunk_end']] for c in children for s in c['spans']))
@@ -147,7 +156,7 @@ def llm(ctx, light=False):
     service = settings.light_llm if light else settings.llm
     if service is None:raise unittest.SkipTest('선택 사항인 LLM_LIGHT_MODEL이 설정되지 않았습니다.')
     ctx.require(service,'경량 LLM' if light else 'LLM')
-    result = CompanyLLM(service,limits=settings.limits).complete_json(
+    result = CompanyLLM(service,limits=settings.limits,database=ctx.db,role='background').complete_json(
         'Return only a JSON object with keys parameter, value, unit, temperature_c, evidence_type. Extract exactly from the supplied synthetic sentence. Do not add facts.',
         {'text':QUOTE},max_output_tokens=256)
     ctx.check('JSON 응답 계약',isinstance(result,dict) and all(k in result for k in ('parameter','value','unit','temperature_c','evidence_type')))
@@ -158,10 +167,10 @@ def llm(ctx, light=False):
 
 def embedding(ctx):
     from .chunking import load_chunk_policy
-    from .embedding_client import EmbeddingClient
+    from .wiki_retrieval import GatedEmbeddingClient
     policy = load_chunk_policy()
     if not policy.embedding:raise unittest.SkipTest('Embedding 설정이 필요합니다.')
-    client = EmbeddingClient(policy.embedding)
+    client = GatedEmbeddingClient(policy.embedding,ctx.db)
     vectors = client.embed(['DRAM refresh power consumption.','A recipe for baking bread.'])
     ctx.check('벡터 수·차원 일치',len(vectors)==2 and len(vectors[0])==len(vectors[1]),f'{len(vectors[0])}차원')
     similarity = sum(a*b for a,b in zip(*vectors))
@@ -174,14 +183,20 @@ def reranker(ctx):
     service = load_ai_settings().reranker
     ctx.require(service,'Reranker')
     items = [dict(id='unrelated',text='A recipe for baking bread.'),dict(id='relevant',text='DRAM refresh power consumption is reduced in a simulation.')]
-    result = rerank('DRAM refresh power reduction',items,service)
+    result = rerank('DRAM refresh power reduction',items,service,database=ctx.db)
     ctx.check('순위 응답·문서 연결',{r['id'] for r in result}=={'unrelated','relevant'})
     ctx.check('관련 문서 우선 배치',result[0]['id']=='relevant','간단한 관련성 smoke check입니다.')
 
 
 def compile_wiki(ctx, llm):
-    from .wiki_engine import run_jobs
+    from .pilot_db import connect
+    from .wiki_engine import enqueue, run_jobs
     from .wiki_store import WikiStore
+    # This diagnostic explicitly exercises the retained manual full-sync path.
+    # Production uploads only index raw text and register bounded demand work.
+    with connect(ctx.db) as db:
+        enqueue(db,'manual diagnostic Wiki validation')
+        db.commit()
     result = run_jobs(ctx.db,llm)
     ctx.check('Wiki job 완료',result.get('status') not in ('failed','busy','deferred'),result.get('error',''))
     store = WikiStore(ctx.db)
@@ -192,6 +207,22 @@ def compile_wiki(ctx, llm):
     return store
 
 
+def compile_requested_topic(ctx, wiki_id):
+    from .knowledge_build import register_handlers
+    from .task_queue import run_next
+    from .wiki_store import WikiStore
+    from .wiki_engine import snapshot,current
+    register_handlers()
+    kinds=tuple('knowledge.'+name for name in ('extract','review','publish_source','synthesize','review_synthesis','publish_synthesis','expert_index'))
+    store=WikiStore(ctx.db)
+    # Bound the synthetic check; no scheduler, exploratory learning, or embeddings.
+    for _ in range(32):
+        row=store.record(wiki_id)
+        if row and row['status']=='ready' and current(row,snapshot(ctx.db),{r['id']:r for r in store.rows()}):return row
+        if not run_next(ctx.db,kinds=kinds):break
+    ctx.check('요청한 특화 지식의 추출·독립 검토·게시',False,'수요 단계 작업이 완료되지 않았습니다.')
+
+
 def wiki(ctx):
     from .llm_client import CompanyLLM
     from .pilot_db import connect
@@ -199,7 +230,7 @@ def wiki(ctx):
     from .wiki_engine import enqueue, snapshot
     from .wiki_api import request_topic, TopicRequest
     from .wiki_lint import validate_grounding
-    client = CompanyLLM()
+    client = CompanyLLM(role='background',database=ctx.db)
     ctx.require(client.service,'LLM')
     _, pid = ctx.prepare()
     store = compile_wiki(ctx,client)
@@ -211,13 +242,14 @@ def wiki(ctx):
     compile_wiki(ctx,client)
     ctx.check('변경 없는 Wiki 재사용',len(ctx.meter.calls)==before,'API 재호출 없이 기존 결과를 재사용해야 합니다.')
     note = request_topic('dram',TopicRequest(title='DRAM refresh simulation limitations',source_ids=[source['id']]))
-    compile_wiki(ctx,client)
-    ctx.check('전문가 특화 Wiki 생성',store.record(note['id'])['kind']=='specialization')
+    specialized=compile_requested_topic(ctx,note['id'])
+    ctx.check('전문가 특화 Wiki 생성',specialized['kind']=='specialization')
     second = ctx.root/'new-dram.pdf'
     make_pdf(second,TEXT.replace('25 percent','35 percent').replace('85 C','95 C'))
     added = ingest_file(second,ctx.db,0)
     ctx.check('신규 논문 적재',added['status']=='ready')
     compile_wiki(ctx,client)
+    compile_requested_topic(ctx,note['id'])
     ctx.check('기존 원천 Wiki 보존',store.record(source['id'])['content_hash']==source['content_hash'])
     ctx.check('신규 원천 Wiki 반영',store.record('source-'+added['paper_id']) is not None)
     ctx.check('공통 주제에 신규 논문 연결',any(r['kind']=='topic' and r['scope']=='common' and {pid,added['paper_id']}.issubset(json.loads(r['refs_json'])['paper_ids']) for r in store.rows()))
@@ -240,8 +272,8 @@ def answer(ctx):
     settings = load_ai_settings()
     for service,label in ((settings.llm,'LLM'),(settings.embedding,'Embedding'),(settings.reranker,'Reranker')):ctx.require(service,label)
     _, pid = ctx.prepare(curated=True)
-    compile_wiki(ctx,CompanyLLM())
-    result = ask(Question(question='What refresh power reduction does the DRAM simulation estimate, at what temperature, and was it measured?',expert_ids=['dram'],mode='deep'),CompanyLLM())
+    compile_wiki(ctx,CompanyLLM(role='background',database=ctx.db))
+    result = ask(Question(question='What refresh power reduction does the DRAM simulation estimate, at what temperature, and was it measured?',expert_ids=['dram'],mode='deep'),CompanyLLM(role='answer',database=ctx.db))
     ctx.check('근거 fallback 없이 답변 생성',result['synthesis']['mode']=='llm',result['synthesis']['notice'] if result['synthesis']['mode']!='llm' else '')
     ctx.check('자동 근거 검토 통과',result['research']['validation_status']=='model_reviewed')
     run = read_run(result['run_id'])
@@ -271,7 +303,8 @@ def execute(step, root, live):
             from .chunking import load_chunk_policy
             settings = load_ai_settings()
             routes = {}
-            for name,service in [('llm',settings.llm),('llm-light',settings.light_llm),('reranker',settings.reranker)]:
+            services=[('llm-'+role,settings.for_role(role)) for role in ('background','answer','review')]
+            for name,service in services+[('llm',settings.llm),('llm-light',settings.light_llm),('reranker',settings.reranker)]:
                 if service and service.base_url and service.model:
                     url = service.base_url.rstrip('/') if name.startswith('llm') else service.base_url
                     if name.startswith('llm') and not url.endswith('/chat/completions'):url += '/chat/completions'

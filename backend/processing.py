@@ -159,6 +159,7 @@ def processing_status(database=None):
         monitor=db.execute('SELECT * FROM raw_watcher_status WHERE id=1').fetchone()
         tasks=[dict(r) for r in db.execute('SELECT * FROM processing_tasks ORDER BY updated_at DESC')]
         jobs={r['id']:dict(r) for r in db.execute('SELECT * FROM wiki_jobs')}
+        work=[dict(r) for r in db.execute("SELECT * FROM work_tasks WHERE kind LIKE 'knowledge.%' AND state<>'cancelled' ORDER BY updated_at DESC")]
         papers={r['id']:r['title'] for r in db.execute('SELECT id,title FROM papers')}
         experts={r['id']:r['name'] for r in db.execute('SELECT id,name FROM expert_categories')}
         membership={eid:{r[0] for r in db.execute('SELECT paper_id FROM expert_papers WHERE expert_id=?',(eid,))} for eid in experts}
@@ -188,8 +189,10 @@ def processing_status(database=None):
             if job and job['state'] in ('queued','running','failed'):
                 state=job['state'];stage={'queued':'Wiki 구성 대기','running':'Wiki 구성 중','failed':'Wiki 구성 문제'}[state];detail=job['error'] if state in ('failed','queued') else ''
             else:
-                state='completed';stage='DB·Wiki 반영 완료'
-                if task['paper_id'] in waiting_papers or task['kind']=='expert' and task['target'] in waiting_experts:
+                migrated=bool(job and job['error'].startswith('수요 기반 지식 작업으로 전환'))
+                state='completed';stage=('원문 검색 준비 완료 · 지식은 별도 구축' if task['kind']=='paper' else '전문가 범위 연결 완료 · 지식은 별도 구축') if not job or migrated else 'DB·Wiki 반영 완료'
+                if migrated:detail=job['error']
+                if job and not migrated and (task['paper_id'] in waiting_papers or task['kind']=='expert' and task['target'] in waiting_experts):
                     state='waiting';stage='LLM 종합 대기';detail='근거 연결은 완료했습니다. 사내 LLM 연결 후 종합 지식을 작성합니다.'
                 if task['needs_review']:
                     state='review';stage='원문 검토 필요';detail='읽기 어려운 페이지가 있습니다. 자료 검토에서 확인해 주세요.'
@@ -201,14 +204,26 @@ def processing_status(database=None):
         if job['id'] in linked:continue
         label=experts.get(job['expert_id'],'전문가')+' Wiki 갱신' if job['scope']=='expert' else '공통 Wiki 갱신' if job['scope']=='common' else '지식 자동 반영'
         state='completed' if job['state']=='done' else job['state']
+        migrated=job['state']=='done' and job['error'].startswith('수요 기반 지식 작업으로 전환')
         entries.append(dict(id='wiki-'+str(job['id']),kind='wiki',label=label,state=state,
-                            stage={'queued':'Wiki 반영 대기','running':'Wiki 반영 중','failed':'Wiki 반영 문제','completed':'변경사항 확인·반영 완료'}[state],
-                            detail=job['error'] if state in ('failed','queued') else '',paper_id=None,expert_id=job['expert_id'] or None,updated_at=job['finished_at'] or job['created_at']))
+                            stage='수요 기반 지식 작업으로 전환' if migrated else {'queued':'Wiki 반영 대기','running':'Wiki 반영 중','failed':'Wiki 반영 문제','completed':'변경사항 확인·반영 완료'}[state],
+                            detail=job['error'] if migrated or state in ('failed','queued') else '',paper_id=None,expert_id=job['expert_id'] or None,updated_at=job['finished_at'] or job['created_at']))
+    labels={'extract':'원문 근거 추출','review':'추출 근거 독립 검토','publish_source':'검토 근거 연결',
+            'expert_index':'전문가 지식 연결','synthesize':'주제 지식 종합','review_synthesis':'종합 근거 독립 검토',
+            'publish_synthesis':'검토된 종합 발행','embed':'검색 의미 색인'}
+    for item in work:
+        payload=json.loads(item['payload_json']);kind=item['kind'].split('.')[-1]
+        pid=payload.get('paper_id');eid=payload.get('expert_id')
+        state=item['state'];stage=labels.get(kind,'지식 갱신')
+        entries.append(dict(id='work-'+item['id'],kind='knowledge',_work_key=(item['kind'],item['target']),label=papers.get(pid,experts.get(eid,'공통 지식')),
+            state=state,stage=stage+{'queued':' 대기','running':' 중','completed':' 완료','failed':' 확인 필요'}.get(state,''),
+            detail='원문 검색과 독립적인 백그라운드 작업입니다.' if state!='failed' else '처리를 완료하지 못했습니다. 설정과 작업 이력을 확인하세요.',
+            paper_id=pid,expert_id=eid,updated_at=datetime.fromtimestamp(item['updated_at'],timezone.utc).isoformat()))
     entries.sort(key=lambda e:e['updated_at'],reverse=True)
     # Old failures superseded by successful retries remain in history, not alerts.
     seen=set()
     for e in entries:
-        key=(e['kind'],e['expert_id'],e['paper_id'] or e['label'])
+        key=e.pop('_work_key',None) or (e['kind'],e['expert_id'],e['paper_id'] or e['label'])
         e['superseded']=key in seen;seen.add(key)
     counts={s:sum(e['state']==s and not e['superseded'] for e in entries) for s in ('queued','running','completed','failed','review','waiting')}
     alive=bool(monitor and (datetime.now(timezone.utc)-datetime.fromisoformat(monitor['heartbeat_at'])).total_seconds()<SCAN_SECONDS*3)

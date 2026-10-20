@@ -9,15 +9,17 @@ export function conversationTurns(record:SavedSearch):ConversationTurn[]{
    Array.isArray(t.expertIds)&&t.expertIds.every(x=>typeof x==='string')&&Array.isArray(t.expertNames)&&t.expertNames.every(x=>typeof x==='string')&&
    ['pending','completed','stopped','error'].includes(t.status)&&(!t.result||(Array.isArray(t.result.claims)&&Array.isArray(t.result.hits)))&&
    (t.status!=='completed'||t.result||(t.reportChange&&typeof t.reportChange.reportId==='string'&&typeof t.reportChange.sectionTitle==='string'&&typeof t.reportChange.revision==='number')));
-  if(valid.length)return structuredClone(valid).map(t=>t.status==='pending'?{...t,status:'stopped',message:'페이지를 닫아 이전 답변이 중단되었습니다. 다시 질문할 수 있습니다.'}:t);
+  if(valid.length)return structuredClone(valid).map(t=>t.status==='pending'&&!t.request?{...t,status:'stopped',message:t.durable?'질문 등록 중 화면이 닫혔습니다. 서버의 내 질문 목록에서 처리 상태를 확인해 주세요.':'페이지를 닫아 이전 답변이 중단되었습니다. 다시 질문할 수 있습니다.'}:t);
  }
  return [{id:record.id,question:record.question,expertIds:record.expertIds,expertNames:record.expertNames,createdAt:record.createdAt,status:'completed',result:structuredClone(record.result)}];
 }
 export function contextRunIds(turns:ConversationTurn[]):string[]{
- return [...new Set(turns.filter(t=>t.status==='completed'&&t.result?.run_id).map(t=>t.result!.run_id!))].slice(-6);
+ return [...new Set(turns.filter(t=>t.status==='completed'&&t.request?.is_owner!==false).flatMap(t=>[...(t.historyRunIds??[]),...(t.result?.run_id?[t.result.run_id]:[])]))].slice(-6);
 }
 export function saveConversation(id:string,turns:ConversationTurn[],visibility:SavedSearch['visibility']):SavedSearch{
  const last=[...turns].reverse().find(t=>t.result), first=turns[0];
+ const requests=turns.flatMap(turn=>turn.request?[turn.request]:[]);
+ if(requests.length)visibility=requests.some(request=>request.visibility==='team')?'team':'private';
  return {id,question:first.question,createdAt:first.createdAt,expertIds:last?.expertIds??[],expertNames:last?.expertNames??[],visibility,deleted:false,mode:'deep',turns:structuredClone(turns),
   result:last?.result??{claims:[],hits:[],terms:[],note:'아직 완료된 답변이 없습니다.',total_claims:0}};
 }

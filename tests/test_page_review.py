@@ -77,10 +77,10 @@ class PageReviewTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/pilot/processing').json()['review_pages'],0)
         with connect(self.db) as db:
             self.assertEqual(db.execute('SELECT count(*) FROM page_review_changes').fetchone()[0],1)
-            self.assertEqual(db.execute("SELECT state FROM wiki_jobs WHERE id=?",(response.json()['wiki_job_id'],)).fetchone()[0],'queued')
+            self.assertIsNone(response.json()['wiki_job_id'])
+            self.assertTrue(db.execute("SELECT 1 FROM work_tasks WHERE kind='knowledge.publish_source' AND priority=20 AND state='queued'").fetchone())
             self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
-        run_jobs(self.db,FakeLLM())
-        self.assertTrue(retrieve('quasiparticle',['dram'],self.db)[0])
+        self.assertTrue(retrieve('quasiparticle',['dram'],self.db,local_only=True)[0])
 
     def test_duplicate_save_is_idempotent_and_conflict_preserves_draft(self):
         draft=self.draft();old_revision=draft['revision']

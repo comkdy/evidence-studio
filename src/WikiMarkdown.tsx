@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 // Local evidence and registered Wiki paths only. Never execute embedded HTML or images.
 export function WikiMarkdown({text,path='answer.md'}:{text:string;path?:string}){
  function link(url:string){
-  if(/^\/api\/pilot\/(claims\/|documents\/|wiki-files\/|answer-runs\/[^/]+\/claims\/)/.test(url))return url;
+  if(/^\/api\/pilot\/(claims\/|documents\/|wiki-files\/|answer-runs\/[^/]+\/claims\/|research-requests\/[^/]+\/claims\/)/.test(url))return url;
   if(url.startsWith('#'))return url;
   if(/^[a-z][a-z0-9+.-]*:/i.test(url)||url.startsWith('/'))return '';
   const resolved=new URL(url,'https://wiki.invalid/'+path);

@@ -89,6 +89,6 @@ if __name__=="__main__":
     parser.add_argument("--db",type=Path)
     args=parser.parse_args()
     print(json.dumps(apply_curation(args.path,args.db)))
-    from .wiki_engine import run_jobs
-    print(json.dumps(run_jobs(args.db),ensure_ascii=False))
+    # Source/index changes and demand are saved above. The shared server worker
+    # builds derived knowledge instead of blocking this import on legacy jobs.
 

@@ -38,7 +38,7 @@ JSON이 필수인 것은 아닙니다. 향후 작업별 생성 파라미터 조�
 | --- | --- | --- |
 | `LLM_TIMEOUT_SECONDS` | `300` | 기본·경량 LLM의 1회 socket I/O 대기 한도 |
 | `LLM_QUEUE_TIMEOUT_SECONDS` | `300` | 공유 LLM 호출 슬롯을 기다리는 한도 |
-| `LLM_MAX_CONCURRENT_REQUESTS` | `2` | 한 서버 프로세스의 동시 LLM 호출 상한 |
+| `LLM_MAX_CONCURRENT_REQUESTS` | `1` | 한 서버 프로세스 전체의 동시 LLM 호출 상한; 자원 그룹별 한 슬롯 제한도 함께 적용 |
 | `RESEARCH_TIMEOUT_SECONDS` | `1500` | 심층 분석의 새 작업 시작·결과 채택 예산 |
 | `EMBEDDING_TIMEOUT_SECONDS` | `30` | Embedding 1회 I/O 대기 한도 |
 | `RERANKER_TIMEOUT_SECONDS` | `30` | Reranker 1회 I/O 대기 한도 |
@@ -61,6 +61,12 @@ LLM_TIMEOUT_SECONDS=600
 상위 게이트웨이가 먼저 요청을 끊는 경우 해당 게이트웨이의 제한도 조정해야 합니다. 앱 설정은 게이트웨이 설정을 변경하지 않습니다.
 
 ## 기존 .env에서 변경할 부분
+
+답변·배경 분석·독립 내용 검토의 모델은 각각 `LLM_ANSWER_MODEL`, `LLM_BACKGROUND_MODEL`, `LLM_REVIEW_MODEL`로 선택할 수 있습니다. 생략하거나 비우면 `LLM_BASE_MODEL`을 사용합니다. 역할별 URL·키는 분리하지 않으며 모두 `LLM_BASE_URL`·`LLM_API_KEY`를 공유합니다. 기존 수동 Wiki 경로의 `LLM_LIGHT_MODEL`도 유지합니다.
+
+역할별 `_CONTEXT_TOKENS`, `_TOKENIZER_PATH`, `_MAX_OUTPUT_TOKENS`, `_RESOURCE_GROUP`, `_DEPLOYMENT_REVISION`을 선택적으로 지정할 수 있습니다. 출력 한도 0은 별도 역할 기본값을 두지 않는다는 뜻이며 작업에서 지정한 출력 한도가 우선합니다. 모델 배포 내용이 바뀌면 revision을 변경해 캐시가 이전 답변을 재사용하지 않도록 합니다.
+
+`LLM_RESOURCE_GROUP` 기본값은 `shared`이며 모든 역할이 상속합니다. 모델 이름이나 URL이 달라도 같은 서버 자원을 사용하면 같은 그룹으로 둡니다. 그룹마다 한 호출만 진행하고, 호출 사이에 사용자 작업을 우선합니다. 실제 하드웨어 분리가 확인된 경우에만 역할의 그룹을 나누고 전체 동시 상한을 조정합니다. 토큰 무제한을 동시 처리 능력으로 해석하지 않습니다.
 
 1. `LLM_MODEL`의 값을 `LLM_BASE_MODEL`로 옮깁니다. 기존 이름도 호환 별칭으로 계속 읽습니다.
 2. `LLM_LIGHT_BASE_URL`, `LLM_LIGHT_API_KEY`를 삭제합니다. 경량 모델은 공통 LLM URL·키를 사용합니다.

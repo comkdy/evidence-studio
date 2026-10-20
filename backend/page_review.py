@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from .auth import current_user, has_permission, require_permission
 from .pilot_db import connect, now
 from .chunking import reindex_document, load_chunk_policy, prepare_document_index, validate_prepared_input, IndexInputsChanged
-from .wiki_engine import enqueue
 
 router=APIRouter(prefix='/api/pilot',tags=['Source review'])
 
@@ -105,7 +104,7 @@ def prepare_review_index(db,page,request):
     state='excluded' if request['action']=='exclude' else 'needs_review' if request['action']=='reopen' else 'ready'
     if request['action'] in ('exclude','reopen'):text=page['text']
     try:
-        return prepare_document_index(db,page['run_id'],load_chunk_policy(),
+        return prepare_document_index(db,page['run_id'],load_chunk_policy(local_only=True),
                                       page_updates={page['id']:{'text':text,'status':state}})
     except Exception as error:
         raise HTTPException(503,'검색 준비에 실패해 변경사항을 저장하지 않았습니다. 검색 서비스 연결을 확인한 뒤 다시 시도해 주세요.') from error
@@ -138,7 +137,11 @@ def apply_change(db,page,request,reviewer_id,prepared):
     try:reindex_document(db,page['run_id'],prepared['policy'],prepared=prepared)
     except Exception as error:
         raise HTTPException(503,'검색 반영에 실패해 변경사항을 저장하지 않았습니다. 검색 서비스 연결을 확인한 뒤 다시 시도해 주세요.') from error
-    job_id=enqueue(db,'Reviewed source page updated')
+    from .knowledge_build import refresh_local_index,sync_demands,refresh_derived_for_papers
+    refresh_local_index(db,[page['paper_id']])
+    sync_demands(db,paper_ids=[page['paper_id']],owner_type='source_review',owner_id=page['id'],priority=20,reason='검토된 원문 변경')
+    refresh_derived_for_papers(db,[page['paper_id']],priority=20)
+    job_id=None
     remaining=db.execute("SELECT count(*) FROM pages pg JOIN paper_documents d ON d.current_run_id=pg.run_id WHERE d.paper_id=? AND pg.status NOT IN ('ready','excluded')",(page['paper_id'],)).fetchone()[0]
     db.execute("UPDATE processing_tasks SET wiki_job_id=?,needs_review=?,updated_at=? WHERE paper_id=? AND state='db_ready'",(job_id,int(bool(remaining)),stamp,page['paper_id']))
     db.execute("UPDATE page_review_requests SET state='applied',reviewer_id=?,decided_at=? WHERE id=?",(reviewer_id,stamp,request['id']))
@@ -176,7 +179,7 @@ def submit_review(page_id:str,draft:ReviewInput):
                       VALUES(?,?,?,?,?,?,?,'pending',?)""",(*request.values(),user['employee_id'],now()))
         job_id=apply_change(db,page,request,user['employee_id'],prepared) if can_apply else None
         db.commit()
-        return {'id':request['id'],'state':'applied' if job_id else 'pending','wiki_job_id':job_id}
+        return {'id':request['id'],'state':'applied' if can_apply else 'pending','wiki_job_id':job_id}
 
 
 @router.post('/page-review-requests/{request_id}/decision')

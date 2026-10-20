@@ -7,9 +7,9 @@ from .pilot_db import connect, write_connection, now
 from .research_progress import checkpoint
 
 
-def read_report(report_id, version=None):
+def read_report(report_id, version=None, database=None):
     owner = current_user()['employee_id']
-    with connect() as db:
+    with connect(database) as db:
         row = db.execute('SELECT * FROM reports WHERE id=? AND owner_id=?', (report_id, owner)).fetchone()
         if not row:
             raise HTTPException(404, '보고서를 찾을 수 없습니다.')
@@ -65,14 +65,14 @@ def create_report(title, purpose):
     return read_report(report_id)
 
 
-def focus_context(report_id, section_id, revision):
+def focus_context(report_id, section_id, revision, database=None):
     if not report_id:
         if section_id or revision is not None:
             raise HTTPException(422, '보고서와 구간을 함께 선택해 주세요.')
         return []
     if not section_id or revision is None:
         raise HTTPException(422, '보고서 구간과 버전을 선택해 주세요.')
-    report = read_report(report_id)
+    report = read_report(report_id,database=database)
     check_revision(report, revision)
     section = section_in(report, section_id)
     return [dict(question='선택한 보고서 구간의 문맥 (논문 근거가 아님): '+report['document']['title']+' / '+section['title'],

@@ -1,7 +1,26 @@
 """Offline, escaped HTML/JSON diagnostic reports. Never embeds provider responses."""
 import html
 import json
+import time
 from pathlib import Path
+
+
+def replace_report(temporary, target):
+    """Keep atomic checkpoints when Windows briefly holds a report open.
+
+    Only OS access/sharing/lock errors at replacement are retried. Isolation
+    guard exceptions have no winerror and are propagated immediately. A lasting
+    permission error still fails after a short, bounded wait; never delete or
+    copy over the previously published report as a fallback.
+    """
+    delays=(0,.025,.05,.1,.2)
+    for attempt,delay in enumerate(delays):
+        if delay:time.sleep(delay)
+        try:
+            return temporary.replace(target)
+        except PermissionError as error:
+            if getattr(error,'winerror',None) not in (5,32,33) or attempt==len(delays)-1:
+                raise
 
 
 def write_report(directory, report):
@@ -10,7 +29,7 @@ def write_report(directory, report):
     target = directory / 'report.json'
     temporary = directory / 'report.json.tmp'
     temporary.write_text(encoded, encoding='utf-8')
-    temporary.replace(target)
+    replace_report(temporary,target)
     esc = lambda v: html.escape(str(v), quote=True)
     labels = {'passed': '성공', 'failed': '실패', 'skipped': '미실행', 'running': '실행 중'}
     rows = []
@@ -39,4 +58,4 @@ def write_report(directory, report):
     </style><main><span class="eyebrow">Evidence Studio / Diagnostics</span><h1>단계별 점검 보고서</h1><p class="muted">'''+esc(report['created_at'])+' · '+esc(report['run_id'])+'</p><p class="intro">선택한 단계의 코드·연동·근거 연결을 점검한 결과입니다. 운영 자료 대신 합성 PDF와 격리된 DB·Wiki를 사용했습니다. 실제 모델 품질 전체를 보증하는 평가 결과는 아닙니다.</p><div class="totals">'+''.join('<div>'+label+'<b>'+str(counts[s])+'</b></div>' for s,label in labels.items())+'</div><p class="note">실제 API 허용: '+('예 · 선택 단계에서 설정된 서비스만 호출' if report['live'] else '아니요 · 실제 연동 단계는 미실행')+'<br>토큰은 API가 반환한 항목만 집계합니다. 미제공·일부 집계·실패를 0으로 대체하지 않습니다. 모델 응답 시간과 단계 전체 시간은 다릅니다.</p>'+''.join(rows)+'<footer>이 보고서에는 API 키·주소·SSO 사번·모델 응답 원문을 기록하지 않습니다. JSON 결과는 같은 폴더의 report.json에 있습니다. SSO·OCR 및 자동 canonical claim 추출은 이 도구의 점검 범위에 포함하지 않습니다.</footer></main></html>'
     temporary = directory / 'report.html.tmp'
     temporary.write_text(document, encoding='utf-8')
-    temporary.replace(directory / 'report.html')
+    replace_report(temporary,directory / 'report.html')

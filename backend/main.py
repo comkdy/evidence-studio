@@ -21,6 +21,8 @@ from .page_review import router as page_review_router
 from .terminology_api import router as terminology_router
 from .research_stream import router as research_router
 from .report_api import router as report_router
+from .research_requests import router as request_router
+from .knowledge_learning import router as learning_router
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -52,6 +54,8 @@ app.include_router(page_review_router)
 app.include_router(terminology_router)
 app.include_router(research_router)
 app.include_router(report_router)
+app.include_router(request_router)
+app.include_router(learning_router)
 app.middleware('http')(authentication_middleware)
 
 

@@ -176,14 +176,14 @@ def preview_membership(db, draft, *, include_evidence_counts=True):
             "counts":counts,
             "facets":criteria}
 
-def refresh_expert_policies(db):
+def refresh_expert_policies(db, *, paper_ids=None):
     for row in db.execute("SELECT * FROM expert_policies WHERE expert_id NOT IN (SELECT expert_id FROM expert_deletions)").fetchall():
         draft=ExpertDraft.model_validate(json.loads(row["policy_json"]))
         # Automatic refresh only needs membership, not a full knowledge inventory
         # for every expert. The public preview/create/update still return counts.
         result=preview_membership(db,draft,include_evidence_counts=False)
         replace_memberships(db,row["expert_id"],result)
-    return sync_wiki_memberships(db)
+    return sync_wiki_memberships(db,paper_ids=paper_ids)
 
 @router.get("/options")
 def expert_options():
@@ -219,7 +219,7 @@ def create_expert(draft:ExpertCreate):
         db.execute("INSERT INTO expert_policies VALUES(?,?,?,?)",(expert_id,serialized,int(draft.enabled),now()))
         for p in result["admitted"]:
             db.execute("INSERT INTO expert_papers VALUES(?,?,?)",(expert_id,p["id"],"expert-policy-v1"))
-        job_id=sync_wiki_memberships(db)
+        job_id=sync_wiki_memberships(db,expert_id=expert_id,paper_ids=[])
         from .processing import record_expert_creation
         record_expert_creation(db,expert_id,draft.name,job_id)
         db.commit()
@@ -251,7 +251,7 @@ def update_expert(expert_id:str, draft:ExpertUpdate):
           DO UPDATE SET policy_json=excluded.policy_json,enabled=excluded.enabled""",
           (expert_id,serialized,int(draft.enabled),now()))
         replace_memberships(db,expert_id,result)
-        sync_wiki_memberships(db)
+        sync_wiki_memberships(db,expert_id=expert_id,paper_ids=[])
         db.commit()
         return {"id":expert_id,"name":draft.name,"status":"updated","counts":result["counts"]}
 
@@ -267,7 +267,7 @@ def delete_expert(expert_id:str, draft:ExpertDelete):
         deleted_at=now()
         # Keep the original Wiki attribution and a reversible configuration snapshot.
         db.execute("INSERT INTO expert_deletions VALUES(?,?)",(expert_id,deleted_at))
-        sync_wiki_memberships(db)
+        sync_wiki_memberships(db,expert_id=expert_id,paper_ids=[])
         db.commit()
         return {"id":expert_id,"name":current["draft"]["name"],"deleted_at":deleted_at}
 
@@ -284,7 +284,7 @@ def restore_expert(expert_id:str, draft:ExpertRestore):
         if any(r[0].casefold()==name.casefold() for r in db.execute("SELECT name FROM expert_categories WHERE id NOT IN (SELECT expert_id FROM expert_deletions)")):
             raise HTTPException(409,"같은 이름의 전문가가 있어 복원할 수 없습니다. 해당 전문가 이름을 먼저 변경해 주세요.")
         db.execute("DELETE FROM expert_deletions WHERE expert_id=?",(expert_id,))
-        refresh_expert_policies(db)
+        refresh_expert_policies(db,paper_ids=[])
         db.commit()
         return {"id":expert_id,"name":name}
 

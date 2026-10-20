@@ -11,7 +11,7 @@ from test_pilot import TEXT
 from backend.pilot_db import connect, now
 from backend.pilot_ingest import ingest_file
 from backend.wiki_api import retry_wiki_job, WikiJobRetry
-from backend.wiki_engine import run_jobs
+from backend.wiki_engine import enqueue, run_jobs
 from backend.wiki_store import WikiStore, WikiError
 from backend.processing import processing_status
 
@@ -128,6 +128,9 @@ class WikiRetryReuseTests(unittest.TestCase):
     def test_successful_paper_is_not_reingested_or_sent_to_llm_on_job_retry(self):
         for i in range(2):
             ingest_file(self.pdf(f'paper-{i}.pdf', TEXT+f' Additional result number {i}.'), self.db, 0)
+        with connect(self.db) as db:
+            enqueue(db, 'manual retry fixture')
+            db.commit()
         model = FakeLLM(); complete = model.complete_json; attempted = []
         def fail_second(system, payload):
             attempted.append(payload)
@@ -165,6 +168,7 @@ class WikiRetryReuseTests(unittest.TestCase):
             paper = db.execute('SELECT id FROM papers').fetchone()[0]
             db.execute('DELETE FROM paper_topics')
             db.executemany('INSERT INTO paper_topics(paper_id,tag,basis) VALUES(?,?,?)', [(paper, tag, 'test') for tag in ('Alpha', 'Beta')])
+            enqueue(db, 'manual retry fixture')
             db.commit()
         model = FakeLLM(); complete = model.complete_json
         def fail_beta(system, payload):

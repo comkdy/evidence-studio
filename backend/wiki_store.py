@@ -101,7 +101,7 @@ class WikiStore:
         return meta, body
 
     def publish(self, page_id, relative, title, body, refs, input_hash, *,
-                scope='common', expert_id=None, kind='topic', status='ready', producer='evidence-reuse', reason='knowledge update', adopt=False):
+                scope='common', expert_id=None, kind='topic', status='ready', producer='evidence-reuse', reason='knowledge update', adopt=False, guard=None):
         old = self.record(page_id)
         if old:
             if not adopt:
@@ -122,15 +122,16 @@ class WikiStore:
             raise WikiError('Wiki 파일이 편집되었습니다. 변경을 확인한 뒤 다시 실행하세요.')
         # A history write is immutable. The mutable file is replaced atomically; on DB
         # failure we restore it. On process crash, hash checks fail closed for repair.
-        atomic_write(safe_path(self.root, history), text)
         replaced=False
         try:
             with write_connection(self.database) as db:
+                if guard:guard(db)
                 current = db.execute('SELECT content_hash FROM wiki_files WHERE id=?', (page_id,)).fetchone()
                 if (current['content_hash'] if current else None) != (old['content_hash'] if old else None):
                     raise WikiError('다른 작업이 Wiki를 갱신했습니다. 다시 시도하세요.')
                 if (path.read_text(encoding='utf-8') if path.exists() else None)!=previous:
                     raise WikiError('Wiki 파일이 편집되었습니다. 변경을 확인한 뒤 다시 실행하세요.')
+                atomic_write(safe_path(self.root, history), text)
                 atomic_write(path, text)
                 replaced=True
                 db.execute('INSERT OR REPLACE INTO wiki_files VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',

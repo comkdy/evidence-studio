@@ -4,7 +4,8 @@ export type Measure = {id:string;label:string;raw_value:string;kind:string;sampl
 export type Claim = {id:string;paper_id:string;document_id?:string;title?:string;summary:string;kind:string;scope:string;sources:Source[];measurements:Measure[];experts:{id:string;name:string}[]};
 export type AbstractSummary = {text:string;language:'ko';source:'abstract';producer:string;prompt_version:string;created_at:string};
 export type Paper = {id:string;title:string;title_source:string;abstract:string;abstract_summary?:AbstractSummary|null;filename:string;document_id:string;page_count:number;status:string;claim_count:number;chunk_count:number;topics:{tag:string;basis:string}[]};
-export type Detail = Paper & {claims:Claim[];pages:{id:string;page_number:number;status:string;char_count:number}[]};
+export type PaperKnowledge = {coverage:{status:string;ready_chunks:number;total_chunks:number;review_state:string};common_wikis:Wiki[];experts:{id:string;name:string;enabled?:number|boolean}[]};
+export type Detail = Paper & {claims:Claim[];pages:{id:string;page_number:number;status:string;char_count:number}[];knowledge?:PaperKnowledge};
 export type Wiki = {id:string;expert_id:string;expert_name:string;title:string;body:string;limitation:string;created_at:string;claim_count:number;paper_count:number;markdown?:string;path?:string;revision?:number;status?:string;scope?:string;kind?:string};
 export type WikiDetail = Wiki & {claims:Claim[];total_claims:number;history?:{revision:number;producer:string;reason:string;created_at:string}[]};
 export type Hit = {id:string;paper_id:string;title:string;text:string;page_number:number;page_end?:number;page_id:string;document_id:string;parent_context?:{text:string;section:string;pages:number[]}};
@@ -17,14 +18,19 @@ export type Schema = {tables:{name:string;label:string;count:number;columns:{nam
 export type PageIssue={paper_id:string;title:string;document_id:string;page_id:string;page_number:number;status:string;char_count:number;pending_requests:number};
 export type CorpusStatus = {issues:PageIssue[];reviewed_pages:PageIssue[];changes:{id:string;created_at:string;papers:number;claims:number;measurements:number;wiki_pages:number}[];unresolved_titles:{id:string;title:string}[]};
 export type Recommendation = {experts:{id:string;name:string;overview:string;matching_papers:number}[];method:string};
-export type ConversationTurn = {id:string;question:string;expertIds:string[];expertNames:string[];createdAt:string;status:"pending"|"completed"|"stopped"|"error";result?:SearchResult;message?:string;focusTitle?:string;reportChange?:{reportId:string;revision:number;sectionTitle:string;model:string;elapsedMs:number}};
+export type ResearchRequest = {id:string;owner_id?:string;is_owner?:boolean;status:'queued'|'running'|'completed'|'cancelled'|'failed';question:string;expert_ids:string[];expert_names:string[];visibility:'private'|'team';phase:string;local_evidence:SearchResult;result:SearchResult|null;error?:string;created_at:string;updated_at:string;cache_hit:boolean;history_run_ids?:string[];report_id?:string|null;report_section_id?:string|null;report_revision?:number|null;learning_eligible?:boolean};
+export type RequestState = Pick<ResearchRequest,'id'|'is_owner'|'status'|'phase'|'visibility'|'updated_at'|'cache_hit'|'learning_eligible'|'report_id'|'report_section_id'|'report_revision'>;
+export type ResearchRequestSummary = Omit<ResearchRequest,'local_evidence'|'result'>;
+export type KnowledgeGapKind = 'missing_sources'|'extraction_gap'|'retrieval_gap'|'condition_gap'|'conflict_gap'|'incorrect'|'missing_evidence'|'unclear';
+export type KnowledgeProgress = {id:string;name:string;coverage:{total:number;ready:number;partial:number;pending:number;papers?:{paper_id:string;ready_chunks:number;total_chunks:number}[]};questions:{id:string;question:string;state:string;updated_at:string}[];gaps:{id:string;kind:KnowledgeGapKind;detail:string;state:string;next_action?:string}[];gap_count?:number;recent_improvements:{kind:string;description:string;created_at:string}[];question_readiness:{total:number;evidence_ready:number;needs_evidence:number}};
+export type ConversationTurn = {id:string;question:string;expertIds:string[];expertNames:string[];createdAt:string;status:"pending"|"completed"|"stopped"|"error";result?:SearchResult;message?:string;focusTitle?:string;durable?:boolean;request?:RequestState;historyRunIds?:string[];reportChange?:{reportId:string;revision:number;sectionTitle:string;model:string;elapsedMs:number}};
 export type SavedSearch = {reportId?:string;turns?:ConversationTurn[];id:string;question:string;expertIds:string[];expertNames:string[];createdAt:string;visibility:'private'|'team';deleted:boolean;mode?:ResearchMode;result:SearchResult};
 export type PilotView = 'search'|'library'|'wiki'|'team'|'personal'|'status'|'settings'|'guide'|'users'|'dictionary';
 export const viewNames:Record<PilotView,string> = {search:'연구 질문',library:'논문 라이브러리',wiki:'전문가 지식',team:'팀의 질문',personal:'내 페이지',status:'자료 현황',settings:'전문가 설정',guide:'사용 가이드',users:'유저 관리',dictionary:'용어 사전'};
 export const kinds:Record<string,string> = {observation:'실험 관측',estimate:'모델·계산 추정',interpretation:'저자 해석',limitation:'적용 한계',measured:'측정',simulated:'시뮬레이션',estimated:'추정'};
 export async function get<T>(path:string,signal?:AbortSignal):Promise<T> {
   const response=await fetch('/api/pilot'+path,{signal});
-  if(!response.ok)throw new Error(response.status===404?'요청한 자료를 찾을 수 없습니다.':'자료를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  if(!response.ok)throw Object.assign(new Error(response.status===404?'요청한 자료를 찾을 수 없습니다.':'자료를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'),{status:response.status});
   return response.json();
 }
 export function time(value:string|null){return value?new Date(value).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}):'아직 기록 없음';}

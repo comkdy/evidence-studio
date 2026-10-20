@@ -11,6 +11,7 @@ GitHub로 받는 경우: [clone·pull 및 실행 안내](docs/GITHUB_TRANSFER.md
 - 공유 URL·키, 모델별 설정, .env 변경 방법: [설정 안내](docs/CONFIGURATION.md)
 - 단계별 실행·실제 API 점검·HTML 보고서: [사내 점검 도구](docs/DIAGNOSTICS.md)
 - 지식 작성 원칙: [공통 작성 지침](backend/prompts/wiki_policy.md)
+- 수요 기반 구축·공통 작업 큐·비동기 질문: [처리량 구조](docs/THROUGHPUT_ARCHITECTURE.md)
 
 ## 빠른 시작 — Windows PowerShell
 
@@ -32,17 +33,18 @@ Copy-Item .env.example .env
 
 `BOOTSTRAP_ADMIN_EMPLOYEE_ID`가 비어 있으면 로컬 확인용 데모 ID `0000000`을 사용합니다. 사내에서는 실제 초기 관리자 사번을 `.env`에 지정한 뒤 첫 실행하세요. SSO 모드는 실제 사번을 설정해야 시작됩니다.
 
-첫 실행 시 빈 DB의 schema, 기본 전문가 9개, 용어 사전 기본값, `.env`의 `BOOTSTRAP_ADMIN_EMPLOYEE_ID`에 지정한 초기 관리자를 생성합니다. 기존 연구 데이터는 복원하지 않습니다. `raw/` 감시는 첫 실행부터 시작하고 이후 60초마다 PDF를 확인합니다. 원본 PDF는 포함하지 않습니다. 모델 설정 후 `raw/`에 PDF를 넣으면 수집과 Wiki 작성이 시작됩니다. 새 PDF와 생성된 DB·Wiki·실제 `.env`는 Git에서 제외됩니다.
+첫 실행 시 빈 DB의 schema, 기본 전문가 9개, 용어 사전 기본값, `.env`의 `BOOTSTRAP_ADMIN_EMPLOYEE_ID`에 지정한 초기 관리자를 생성합니다. `raw/` 감시는 첫 실행부터 시작하고 이후 60초마다 PDF를 확인합니다. 논문 등록 직후 원문 검색이 가능하며, 전문가 담당 범위와 조사 수요에 따라 필요한 분석·Wiki를 점진적으로 구축합니다. 모델 설정이나 Wiki 완성은 원문 검색의 선행 조건이 아닙니다. 새 PDF와 생성된 DB·Wiki·실제 `.env`는 Git에서 제외됩니다.
 
 ## 연결 후 동작하는 범위
 
-- PDF text 추출 → 문맥 chunking → keyword/vector 검색·reranking → 근거 기반 심층 답변.
+- PDF text 추출 → 로컬 원문 검색 → 근거 먼저 표시·배경 상세 답변. 의미 색인·Wiki는 독립적으로 준비합니다.
 - 앞선 대화를 참고하는 후속 질문, 실제 처리 단계 표시, 답변 중지와 대화 다시 열기.
 - 대화 옆 보고서의 구간 선택·부분 수정·출처 확인·버전 복원·HTML 다운로드. [사용 방법](docs/REPORT_AUTHORING.md)
 - 공통·전문가별 Markdown Wiki 작성, 관련 변경 반영, 이력·목차·lint.
 - 전문가 생성·수정·삭제, 논문 분류 필터, 자료 검토·수정 제안, 용어 사전, 사용자 권한.
+- 서버의 질문 이력·공유 범위·취소, 전문가 분석 범위·대표 질문·미해결 항목, 출처 검증을 거치는 지속 개선.
 
-**추가 구현이 필요한 부분:** 자동 OCR, LLM을 통한 canonical claim·수치·실험 조건 추출 및 한국어 초록 요약의 자동 저장, 실제 SSO 검증/프로필 API, 대화·북마크의 서버 저장과 팀 동기화. 현재 구조화 근거/초록 요약은 검증된 JSON을 가져오는 기능입니다. `.env`만 설정한다고 기존 수동 분석 결과까지 자동 재생성되지는 않습니다. 구체적인 연결 위치는 [이관 안내](docs/HANDOFF.md)를 참고하세요.
+**추가 구현이 필요한 부분:** 자동 OCR, 검증 후보의 canonical claim·수치·실험 조건 DB 자동 승격, 한국어 초록 요약 자동 저장, 실제 SSO 검증/프로필 API, 브라우저 대화 묶음·북마크의 서버 동기화. 수요 기반 분석 후보와 검토된 Wiki는 자동 구축하지만 기존 canonical 원장을 임의로 채우지 않습니다. 새 질문의 이력과 공개 범위는 서버에 저장합니다. 구체적인 범위는 [이관 안내](docs/HANDOFF.md)를 참고하세요.
 
 ## 화면 수정 및 검증
 

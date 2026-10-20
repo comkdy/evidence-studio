@@ -208,6 +208,7 @@ class WikiUsageTests(unittest.TestCase):
 
     def test_real_wiki_path_records_both_light_and_main_without_prompt_data(self):
         self.pdf();self.scanner.scan();process_next(self.db)
+        with write_connection(self.db) as db:enqueue(db,'manual usage regression',scope='common')
         main,light=self.client(),self.client('small',True)
         main._wiki_extractor=light
         def response(request,**kwargs):

@@ -3,21 +3,22 @@ import json
 import time
 from uuid import uuid4
 from fastapi import HTTPException
-from .wiki_store import WikiError
+from .wiki_store import WikiError, digest
 from .llm_client import CompanyLLM, LLMError, LLMTimeoutError, LLMCapacityError
 from .wiki_retrieval import retrieve, keywords
 from .wiki_policy import load_prompt
 from .answer_evidence import build_evidence
 from .answer_validation import grounded_sections, render_answer, review_items, apply_review
 from .answer_trace import save_run
-from .conversation_context import conversation_context, contextual_query
-from .research_progress import checkpoint, stage
+from .conversation_context import request_context, contextual_query, context_fields, has_private_context
+from .research_progress import checkpoint as research_checkpoint, stage
 from .ai_settings import load_ai_settings
 
 VERSION = 'research-answer-v1'
 MAX_QUERIES = 6
 MAX_MODEL_CALLS = 4
 MAX_INPUT_CHARS = 100000
+COMPANY_LLM_TYPE = CompanyLLM
 
 
 def _queries(value, limit):
@@ -78,23 +79,35 @@ def _limitations(evidence, state):
     return notes
 
 
-def answer(request, llm=None):
+def answer(request, llm=None, *, database=None, prepared=None, context=None):
     from .wiki_api import load_catalogue, read_page
     from .terminology import snapshot as term_snapshot, prompt_rules, prompt_text, query_rules
+    def checkpoint(phase=None):
+        research_checkpoint()
+        if context:
+            context.check_cancelled()
+            if phase:
+                context.checkpoint({**getattr(context,'checkpoint_data',{}),'phase':phase})
     checkpoint()
-    conversation = conversation_context(getattr(request, 'history_run_ids', []))
-    from .report_store import focus_context
-    conversation += focus_context(getattr(request, "report_id", None), getattr(request, "report_section_id", None), getattr(request, "report_revision", None))
+    conversation = request_context(request,database)
     stage('context', '앞선 대화의 주제와 질문 범위를 확인했습니다.')
     start = time.monotonic()
     max_seconds = load_ai_settings().limits.research_timeout_seconds
     deadline = start + max_seconds
-    store, state, catalogue = load_catalogue()
+    store, state, catalogue = load_catalogue(database)
     glossary=term_snapshot(store.database)
-    llm = llm or CompanyLLM()
+    llm = llm or CompanyLLM(role='answer',database=database)
+    review_llm = CompanyLLM(role='review',database=database) if isinstance(llm,COMPANY_LLM_TYPE) else llm
     ids = list(dict.fromkeys(request.expert_ids))
     if any(eid not in state['experts'] for eid in ids):
         raise HTTPException(409, '삭제되었거나 사용 중지된 전문가입니다. 다시 선택하세요.')
+    if prepared:
+        from .answer_cache import validity,scope_key
+        if (has_private_context(request) or prepared.get('question')!=request.question.strip()
+            or prepared.get('scope_key')!=scope_key(ids)
+            or not prepared.get('bundle',{}).get('investigation_complete')
+            or prepared.get('validity_hash')!=validity(ids,database=database)):
+            prepared=None
     run_id = str(uuid4())
     mode = 'deep'
     budget = 48000
@@ -105,6 +118,14 @@ def answer(request, llm=None):
     notices, prompts, queries, results = [], {}, [], []
     groups, raw_groups, validation = {}, {}, 'not_generated'
     model_available = True
+    progress={}
+    if context:
+        from .answer_cache import validity
+        resume_key=digest([request.question,sorted(ids),context_fields(request),conversation,
+                          validity(ids,database=database,model_identity=llm.identity),review_llm.identity])
+        prior=getattr(context,'checkpoint_data',{})
+        progress=dict(prior.get('answer_outputs',{})) if prior.get('answer_resume_key')==resume_key else {}
+        context.checkpoint({**prior,'answer_resume_key':resume_key,'answer_outputs':progress})
 
     try:
         for operation in ('answer', 'plan', 'refine', 'review'):
@@ -124,6 +145,7 @@ def answer(request, llm=None):
                   'answer':'논문 근거를 바탕으로 답변을 작성하고 있습니다.',
                   'review':'답변의 주장·수치·인용을 다시 확인하고 있습니다.'}
         stage(operation, labels[operation])
+        checkpoint(operation)
         payload = dict(payload, conversation_context=conversation)
         remaining = deadline - time.monotonic()
         if remaining <= 0 or len(trace['model_calls']) >= MAX_MODEL_CALLS:
@@ -137,12 +159,22 @@ def answer(request, llm=None):
         trace['model_calls'].append(entry)
         called_at = time.monotonic()
         try:
-            result = (llm.complete_json(system, payload, deadline=deadline) if isinstance(llm, CompanyLLM)
-                      else llm.complete_json(system, payload))
+            payload_hash=digest([system,payload])
+            cached=progress.get(operation)
+            client=review_llm if operation=='review' else llm
+            if cached and cached.get('input_hash')==payload_hash:
+                result=cached['result'];entry['status']='resumed_checkpoint'
+            else:
+                result = (client.complete_json(system, payload, deadline=deadline) if isinstance(client, COMPANY_LLM_TYPE)
+                          else client.complete_json(system, payload))
             checkpoint()
             if not isinstance(result, dict):
                 raise WikiError('모델 응답 형식을 확인해야 합니다.')
-            entry['status'] = 'completed'
+            if entry['status']!='resumed_checkpoint':entry['status'] = 'completed'
+            if context:
+                progress[operation]={'input_hash':payload_hash,'result':result}
+                context.checkpoint({**context.checkpoint_data,'answer_outputs':progress})
+            checkpoint(operation+'_completed')
             return result
         except (WikiError, LLMError) as error:
             entry['status'] = 'failed'
@@ -161,7 +193,7 @@ def answer(request, llm=None):
             return
         stage('search', '전문가의 Wiki와 담당 논문에서 관련 근거를 검색하고 있습니다.')
         queries.append(query)
-        ranked, messages = retrieve(query, ids, limit=60,glossary=glossary)
+        ranked, messages = retrieve(query, ids, database=database,limit=60,glossary=glossary)
         checkpoint()
         results.append(ranked)
         notices.extend(messages)
@@ -169,10 +201,17 @@ def answer(request, llm=None):
             reference_id=r['reference_id'], paper_ids=json.loads(r['paper_ids_json']),
             input_hash=r['input_hash']) for r in ranked]))
 
-    search(request.question)
-    if conversation:
-        search(contextual_query(request.question, conversation))
-    if llm.configured and prompts and model_available:
+    if prepared:
+        queries.extend(prepared['queries'])
+        trace['plan']={'queries':prepared['queries'],'gaps':[]}
+        trace['refinement']={'queries':[],'gaps':prepared['bundle'].get('investigation_gaps',[])}
+        trace['prepared_case']={'id':prepared['id'],'validity_hash':prepared['validity_hash']}
+        trace['prepared_case_id']=prepared['id']
+    else:
+        search(request.question)
+        if conversation:
+            search(contextual_query(request.question, conversation))
+    if llm.configured and prompts and model_available and not prepared:
         try:
             plan = call('plan', dict(question=request.question, experts=_profiles(ids, state, {})))
             trace['plan'] = dict(queries=_queries(plan.get('queries'), 3), gaps=_gaps(plan.get('gaps', [])))
@@ -184,10 +223,10 @@ def answer(request, llm=None):
     def assemble():
         stage('evidence', '질문과 연결된 주장·수치·실험 조건을 모으고 있습니다.')
         return build_evidence(_merge(results), ids, store=store, state=state,
-                              catalogue=catalogue, budget=budget)
+                              catalogue=catalogue, budget=budget,database=database)
 
-    bundle = assemble()
-    if llm.configured and prompts and model_available and bundle['evidence']:
+    bundle = prepared['bundle'] if prepared else assemble()
+    if llm.configured and prompts and model_available and bundle['evidence'] and not prepared:
         try:
             refined = call('refine', dict(question=request.question, queries=queries,
                 experts=_profiles(ids, state, {}), evidence=bundle['evidence']))
@@ -210,6 +249,7 @@ def answer(request, llm=None):
         try:
             result = call('answer', dict(question=request.question, mode=mode, experts=profiles,
                 evidence=evidence, limitations=limitations,
+                unverified_feedback=prepared['bundle'].get('unverified_feedback',[]) if prepared else [],
                 investigation_gaps=trace.get('refinement', trace.get('plan', {})).get('gaps', [])))
             if len(json.dumps(result, ensure_ascii=False)) > 24000:
                 raise WikiError('답변이 검증 가능한 길이를 초과했습니다.')
@@ -267,7 +307,7 @@ def answer(request, llm=None):
                  text=ev['text'], page_number=ev['page_number'], page_id=ev['page_id'], document_id=ev['document_id'])
             for key, ev in evidence.items() if ev['kind'] == 'source_text']
     paper_ids = sorted({pid for ev in evidence.values() for pid in ev['paper_ids']})
-    result = dict(claims=claims, total_claims=len(claims), hits=hits, terms=keywords(request.question),
+    result = dict(claims=claims, total_claims=len(claims), hits=hits, terms=keywords(request.question,database),
         note='선택한 전문가들의 담당 범위에서 찾은 원천 근거입니다. 검색 근거 목록과 실제 답변 인용은 구분됩니다.',
         answers=answers, synthesis=synthesis, run_id=run_id,
         research=dict(mode=mode, queries=queries, rounds=len(queries), paper_count=len(paper_ids),
@@ -276,12 +316,18 @@ def answer(request, llm=None):
                  expert_hashes={eid: state['experts'][eid]['hash'] for eid in ids},
                  paper_hashes={pid: state['papers'][pid]['hash'] for pid in paper_ids},
                  wikis=bundle['wikis'], generated_sections=raw_groups,
-                 published_sections=groups, usage=getattr(llm, 'usage_history', []),
-                 model_timings=getattr(llm, 'call_history', []))
+                 published_sections=groups, usage=getattr(llm, 'usage_history', [])+
+                   (getattr(review_llm,'usage_history',[]) if review_llm is not llm else []),
+                 model_timings=getattr(llm, 'call_history', [])+
+                   (getattr(review_llm,'call_history',[]) if review_llm is not llm else []))
     stage('verify', '근거의 최신 상태를 확인하고 답변을 정리하고 있습니다.')
-    _, latest, valid = load_catalogue()
+    checkpoint('publishing')
+    _, latest, valid = load_catalogue(database)
     stale = any(eid not in latest['experts'] or latest['experts'][eid]['hash'] != state['experts'][eid]['hash'] for eid in ids)
     stale |= any(pid not in latest['papers'] or latest['papers'][pid]['hash'] != state['papers'][pid]['hash'] for pid in paper_ids)
+    if prepared:
+        from .answer_cache import validity
+        stale |= prepared['validity_hash'] != validity(ids,database=database)
     try:
         for wiki in bundle['wikis']:
             row = valid.get(wiki['id'])
@@ -292,13 +338,14 @@ def answer(request, llm=None):
     except WikiError:
         stale = True
     checkpoint()
-    trace['history_run_ids'] = list(getattr(request, 'history_run_ids', []))
+    request_context(request,database)  # Owner/current report revision still applies at publication.
+    trace.update(context_fields(request))
     if stale:
         save_run(run_id, request, model_identity=llm.identity, prompt=prompts.get('answer'),
             evidence=evidence, trace=trace, result={'error': 'evidence_changed'},
-            elapsed_ms=int((time.monotonic()-start)*1000), status='superseded')
+            elapsed_ms=int((time.monotonic()-start)*1000), status='superseded',database=database)
         raise HTTPException(409, '답변 준비 중 지식 또는 전문가 설정이 갱신되었습니다. 다시 질문해 주세요.')
     save_run(run_id, request, model_identity=llm.identity, prompt=prompts.get('answer'),
         evidence=evidence, trace=trace, result=result,
-        elapsed_ms=int((time.monotonic()-start)*1000), status='completed' if synthesis['mode'] == 'llm' else 'evidence_only')
+        elapsed_ms=int((time.monotonic()-start)*1000), status='completed' if synthesis['mode'] == 'llm' else 'evidence_only',database=database)
     return result

@@ -70,7 +70,7 @@ class ChunkPolicy:
         return metadata
 
 
-def load_chunk_policy(env_file=None, environ=None):
+def load_chunk_policy(env_file=None, environ=None, *, local_only=False):
     values = {**dotenv_values(env_file or ROOT / ".env", encoding="utf-8-sig", interpolate=False),
               **(os.environ if environ is None else environ)}
     path = (values.get("CHUNK_TOKENIZER_PATH") or "").strip()
@@ -84,7 +84,7 @@ def load_chunk_policy(env_file=None, environ=None):
     if requested not in ("auto", "semantic", "structural"):
         raise ValueError("CHUNKING_MODE must be auto, semantic or structural")
     configured = any((values.get(key) or "").strip() for key in ("EMBEDDING_BASE_URL", "EMBEDDING_ENDPOINT", "EMBEDDING_MODEL", "EMBEDDING_API_KEY"))
-    mode = "semantic" if requested == "semantic" or (requested == "auto" and configured) else "structural"
+    mode = "structural" if local_only else "semantic" if requested == "semantic" or (requested == "auto" and configured) else "structural"
     embedding = None
     if mode == "semantic":
         api_format = (values.get("EMBEDDING_API_FORMAT") or "company").strip()
@@ -267,7 +267,12 @@ def prepare_index(db, run_id, title, pages, policy):
         return prepared
     if policy.mode == "semantic" and db.in_transaction:
         raise ValueError("Prepare semantic indexing before opening a write transaction")
-    embedder = CachedEmbedder(db, policy.embedding, buffered=True) if policy.mode == "semantic" else None
+    if policy.mode == "semantic":
+        from .wiki_retrieval import GatedEmbeddingClient
+        database=next(r['file'] for r in db.execute('PRAGMA database_list') if r['name']=='main')
+        embedder=CachedEmbedder(db,policy.embedding,client=GatedEmbeddingClient(policy.embedding,database),buffered=True)
+    else:
+        embedder=None
     prepared["groups"] = build_chunks(pages, title, policy, embedder, prepared["diagnostics"])
     prepared["embedder"] = embedder
     return prepared

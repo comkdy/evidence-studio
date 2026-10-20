@@ -1,5 +1,6 @@
 """Company Chat Completions client. No public endpoint or implicit credentials."""
 import json
+import logging
 import ssl
 import threading
 import time
@@ -77,9 +78,12 @@ def model_requests_active():
 
 
 class CompanyLLM:
-    def __init__(self, service=None, *, limits=None):
+    def __init__(self, service=None, *, limits=None, role='answer', database=None, priority=None):
         settings = load_ai_settings()
-        self.service = service or settings.llm
+        self.service = service or settings.for_role(role)
+        self.role = role
+        self.database = database
+        self.priority = priority if priority is not None else (60 if role=='lint' else 40 if role in ('background','extract','synthesis') else 0)
         self.limits = limits or settings.limits
         self.timeout_seconds = self.limits.llm_timeout_seconds
         self.usage_history = []
@@ -92,7 +96,9 @@ class CompanyLLM:
     @property
     def identity(self):
         import hashlib
-        return self.service.model + ':' + hashlib.sha256(self.service.base_url.encode()).hexdigest()[:16]
+        signature=[self.service.base_url,self.service.model,self.service.deployment_revision,
+                   self.service.context_tokens,self.service.tokenizer_path,self.service.max_output_tokens,'role-client-v3']
+        return self.service.model + ':' + hashlib.sha256(json.dumps(signature).encode()).hexdigest()[:24]
 
     def complete_json(self, system, payload, *, deadline=None, max_output_tokens=None):
         """Bound local queueing and I/O waits; never automatically repeat generation."""
@@ -100,7 +106,10 @@ class CompanyLLM:
         started = time.monotonic()
         status = 'failed'
         recorded = None
+        slot_info = None
+        result = None
         usage_offset = len(self.usage_history)
+        from .task_queue import model_slot,record_model_call,ModelQueueTimeout
         try:
             if not self.configured:
                 raise LLMError('사내 LLM 주소·모델·API key를 설정해야 합니다.')
@@ -108,7 +117,10 @@ class CompanyLLM:
             queue_deadline = started + self.limits.llm_queue_timeout_seconds
             if deadline is not None:
                 queue_deadline = min(queue_deadline, deadline)
-            with _model_gate.slot(self.limits.llm_max_concurrent_requests, queue_deadline) as waited:
+            # Acquire the shared priority slot before the legacy aggregate cap:
+            # background jobs must not hold that cap while yielding to a user.
+            with model_slot(self.database,self.service.resource_group,self.priority,deadline=queue_deadline) as slot_info, \
+                 _model_gate.slot(self.limits.llm_max_concurrent_requests, queue_deadline) as waited:
                 checkpoint()
                 if waited:
                     stage('llm', '사내 LLM이 응답을 생성하고 있습니다.')
@@ -118,6 +130,8 @@ class CompanyLLM:
                     if remaining <= 0:
                         raise LLMTimeoutError('심층 분석 시간 한도에 도달했습니다.')
                     timeout = min(timeout, remaining)
+                if max_output_tokens is None and self.service.max_output_tokens:
+                    max_output_tokens = self.service.max_output_tokens
                 result = (self._request_json(system, payload, timeout, max_output_tokens=max_output_tokens)
                           if max_output_tokens is not None else self._request_json(system, payload, timeout))
                 checkpoint()
@@ -125,12 +139,25 @@ class CompanyLLM:
                     raise LLMTimeoutError('심층 분석 시간 한도에 도달하여 늦게 도착한 결과를 사용하지 않았습니다.')
                 status = 'completed'
                 return result
+        except ModelQueueTimeout:
+            status='LLMCapacityError'
+            raise LLMCapacityError('사내 LLM 호출 대기 시간이 초과되었습니다. 잠시 후 다시 시도하세요.') from None
         except LLMError as error:
             status = type(error).__name__
             raise
         finally:
-            if recorded:
-                recorded.finish(status,self.usage_history[-1] if len(self.usage_history)>usage_offset else {})
+            usage=self.usage_history[-1] if len(self.usage_history)>usage_offset else {}
+            try:
+                if recorded:
+                    recorded.finish(status,usage)
+                if slot_info:
+                    record_model_call(slot_info,role=self.role,identity=self.identity,resource_group=self.service.resource_group,
+                        elapsed_ms=max(0,(time.monotonic()-started)*1000-slot_info['queued_ms']),
+                        input_chars=len(system)+len(json.dumps(payload,ensure_ascii=False)),
+                        output_chars=len(json.dumps(result,ensure_ascii=False)) if result is not None else 0,
+                        usage=usage,status='completed' if status=='completed' else 'failed')
+            except Exception as error:
+                logging.getLogger(__name__).warning('Model metrics unavailable (%s)',type(error).__name__)
             self.call_history.append(dict(status=status, elapsed_ms=round((time.monotonic()-started)*1000),
                                           input_chars=len(system)+len(json.dumps(payload,ensure_ascii=False))))
 

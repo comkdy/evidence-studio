@@ -35,13 +35,16 @@ class ModelSettings:
     api_key: SecretStr = field(repr=False)
     context_tokens: int = 16384
     tokenizer_path: str = ""
+    resource_group: str = "shared"
+    deployment_revision: str = ""
+    max_output_tokens: int = 0
 
 
 @dataclass(frozen=True)
 class InferenceLimits:
     llm_timeout_seconds: float = 300
     llm_queue_timeout_seconds: float = 300
-    llm_max_concurrent_requests: int = 2
+    llm_max_concurrent_requests: int = 1
     research_timeout_seconds: float = 1500
     reranker_timeout_seconds: float = 30
 
@@ -54,6 +57,15 @@ class AISettings:
     limits: InferenceLimits = field(default_factory=InferenceLimits)
     light_llm: ModelSettings | None = None
     wiki_output_tokens: int = 2048
+    answer: ModelSettings | None = None
+    background: ModelSettings | None = None
+    review: ModelSettings | None = None
+
+    def for_role(self, role):
+        role = {'extract':'background','synthesis':'background','lint':'review'}.get(role,role)
+        if role not in ('answer','background','review'):
+            raise ValueError('Unknown model role')
+        return getattr(self,role) or self.llm
 
 
 def load_ai_settings(
@@ -114,7 +126,7 @@ def load_ai_settings(
             raise ValueError(f"{name} must be between 1 and {upper} seconds") from None
 
     try:
-        concurrency = int(value("LLM_MAX_CONCURRENT_REQUESTS") or 2)
+        concurrency = int(value("LLM_MAX_CONCURRENT_REQUESTS") or 1)
         if not 1 <= concurrency <= 8:
             raise ValueError()
     except ValueError:
@@ -125,5 +137,28 @@ def load_ai_settings(
         llm_max_concurrent_requests=concurrency,
         research_timeout_seconds=seconds("RESEARCH_TIMEOUT_SECONDS", 1500, 7200),
         reranker_timeout_seconds=seconds("RERANKER_TIMEOUT_SECONDS", 30))
+    from dataclasses import replace
+    llm = replace(llm, resource_group=value('LLM_RESOURCE_GROUP') or 'shared',
+                  deployment_revision=value('LLM_DEPLOYMENT_REVISION'))
+    if light:
+        light = replace(light,resource_group=llm.resource_group,deployment_revision=value('LLM_LIGHT_DEPLOYMENT_REVISION') or llm.deployment_revision)
+    embedding = replace(embedding,resource_group=value('EMBEDDING_RESOURCE_GROUP') or 'shared',
+                        deployment_revision=value('EMBEDDING_DEPLOYMENT_REVISION'))
+    reranker = replace(reranker,resource_group=value('RERANKER_RESOURCE_GROUP') or embedding.resource_group,
+                       deployment_revision=value('RERANKER_DEPLOYMENT_REVISION'))
+    def role_model(role):
+        prefix='LLM_'+role.upper()
+        # Roles use the same authenticated company endpoint. Only model and
+        # resource scheduling differ; existing shared URL/key setup is preserved.
+        model=replace(llm,model=value(prefix+'_MODEL') or llm.model,
+            context_tokens=integer(prefix+'_CONTEXT_TOKENS',llm.context_tokens,4096,1048576),
+            tokenizer_path=value(prefix+'_TOKENIZER_PATH') or llm.tokenizer_path,
+            resource_group=value(prefix+'_RESOURCE_GROUP') or llm.resource_group,
+            deployment_revision=value(prefix+'_DEPLOYMENT_REVISION') or llm.deployment_revision,
+            max_output_tokens=integer(prefix+'_MAX_OUTPUT_TOKENS',0,0,262144))
+        if model.max_output_tokens and model.max_output_tokens+1024>=model.context_tokens:
+            raise ValueError(prefix+'_MAX_OUTPUT_TOKENS must leave room for instructions and evidence')
+        return model
     return AISettings(llm=llm, embedding=embedding, reranker=reranker, limits=limits,
-                      light_llm=light, wiki_output_tokens=output_tokens)
+                      light_llm=light, wiki_output_tokens=output_tokens,
+                      answer=role_model('answer'),background=role_model('background'),review=role_model('review'))

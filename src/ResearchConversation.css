@@ -37,3 +37,5 @@
 .research-message-footer>span{font-size:10px;color:#9aa7b8}.research-message-footer button{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;font-size:12px;padding:10px 14px}
 .research-message-footer .research-stop{margin:0}.research-chat .pilot-prompts{margin-top:14px}
 @media(max-width:640px){.research-chat{min-height:calc(100dvh - 330px)}.research-welcome{min-height:130px;padding:17px}.research-welcome h2{font-size:14px}.research-message-form{padding:13px}.research-message-footer{align-items:flex-end}.research-message-footer>span{font-size:9px;max-width:110px;line-height:1.7}.research-message-form textarea{font-size:16px}.research-main .pilot-hero h1{font-size:23px}}
+
+.research-request-actions{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin:14px 0;font-size:12px;color:#67768a}.research-request-actions button{font-size:12px}.pilot-local-heading{font-size:16px;margin-top:30px}

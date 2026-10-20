@@ -69,8 +69,6 @@ def ingest_file(path, db_path=None, stable_seconds=5, progress=lambda stage:None
             document=db.execute("SELECT * FROM paper_documents WHERE sha256=?",(digest,)).fetchone()
             if document:
                 paper_id=document['paper_id']
-                from .wiki_engine import enqueue
-                wiki_job_id=enqueue(db,'duplicate source linked')
                 db.execute("INSERT INTO document_sources VALUES(?,?,?,?,?) ON CONFLICT(path) DO UPDATE SET last_seen_at=excluded.last_seen_at",(str(path),document["id"],filename,now(),now()))
                 return job("unchanged","같은 SHA-256의 문서를 재사용했습니다.",digest)
             return None
@@ -103,7 +101,7 @@ def ingest_file(path, db_path=None, stable_seconds=5, progress=lambda stage:None
             ready=sum(state=="ready" for _,_,state in pages)
             status="ready" if ready==len(pages) and pages else "partial" if ready else "needs_review"
             progress('문맥 분석·검색 준비 중')
-            policy=load_chunk_policy()
+            policy=load_chunk_policy(local_only=True)
             index_pages=[dict(id=run_id+"-p"+str(number),run_id=run_id,page_number=number,text=text,
                               method="pypdf",status=state,char_count=len(text)) for number,text,state in pages]
             prepared=prepare_index(db,run_id,title,index_pages,policy)
@@ -126,7 +124,7 @@ def ingest_file(path, db_path=None, stable_seconds=5, progress=lambda stage:None
             for tag,basis in classify(title,abstract):
                 db.execute("INSERT INTO paper_topics(paper_id,tag,basis) VALUES(?,?,?)",(paper_id,tag,basis))
                 db.execute("INSERT OR IGNORE INTO expert_papers SELECT id,?,? FROM expert_categories WHERE topic_tag=? AND id NOT IN (SELECT expert_id FROM expert_deletions)",(paper_id,"title-abstract-rules-v1",tag))
-            wiki_job_id=refresh_expert_policies(db)
+            wiki_job_id=refresh_expert_policies(db,paper_ids=[paper_id])
             return job(status,f"{len(pages)} pages, {chunk_count} searchable chunks; {len(pages)-ready} pages need review",digest)
         except Exception as error:
             db.rollback()
@@ -155,8 +153,8 @@ if __name__=="__main__":
     args=parser.parse_args()
     while True:
         ingest(args.raw,args.db)
-        from .wiki_engine import run_jobs
-        print(json.dumps(run_jobs(args.db),ensure_ascii=False),flush=True)
+        # The server's priority worker owns derived knowledge. Importing files
+        # must not also drain unrelated legacy Wiki jobs on this process.
         if not args.watch: break
         time.sleep(max(10,args.watch))
 
